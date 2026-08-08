@@ -57,13 +57,15 @@ The default sample asset is:
 projects/ee-change/assets/ETP_samples
 ```
 
-The asset and the main processing settings can be changed in:
+The sample asset and processing parameters can be changed in:
 
 ```text
 src/et_downscaling/config.py
 ```
 
-## Installation
+## Installation and usage
+
+### Local environment
 
 Clone the repository:
 
@@ -72,21 +74,18 @@ git clone https://github.com/CrsMontes/26-et-downscaling-fundacion.git
 cd 26-et-downscaling-fundacion
 ```
 
-Install the project:
-
-```bash
-pip install -e .
-```
-
-For a local Conda environment:
+Create the Conda environment:
 
 ```bash
 conda env create -f environment.yml
 conda activate et-fundacion
-pip install -e .
 ```
 
-## Run
+Install the project in editable mode:
+
+```bash
+pip install -e .
+```
 
 Authenticate Google Earth Engine:
 
@@ -100,7 +99,39 @@ Run the dataset pipeline:
 python scripts/build_training_dataset.py
 ```
 
-The workflow will request a Google Cloud Project ID with access to Earth Engine.
+The workflow will request a Google Cloud Project ID with Earth Engine access.
+
+### Google Colab
+
+Start from a new Colab runtime and run:
+
+```python
+!git clone https://github.com/CrsMontes/26-et-downscaling-fundacion.git
+%cd 26-et-downscaling-fundacion
+%pip install .
+```
+
+Verify that the package was installed correctly:
+
+```python
+import et_downscaling
+print(et_downscaling.__file__)
+```
+
+Authenticate Google Earth Engine:
+
+```python
+import ee
+ee.Authenticate()
+```
+
+Run the pipeline:
+
+```python
+%run scripts/build_training_dataset.py
+```
+
+When prompted, enter a Google Cloud Project ID available to your Earth Engine account.
 
 Generated datasets are written to:
 
@@ -108,28 +139,7 @@ Generated datasets are written to:
 outputs/
 ```
 
-### Google Colab
-
-```python
-!git clone https://github.com/CrsMontes/26-et-downscaling-fundacion.git
-%cd 26-et-downscaling-fundacion
-!pip install -e .
-```
-
-Authenticate Earth Engine:
-
-```python
-import ee
-ee.Authenticate()
-```
-
-Then run:
-
-```python
-%run scripts/build_training_dataset.py
-```
-
-When prompted, enter a Google Cloud Project ID available to your Earth Engine account.
+In Google Colab, the `outputs/` directory is temporary. Download or copy any required results before the runtime is deleted.
 
 ## Configuration
 
@@ -139,7 +149,15 @@ The main processing parameters are defined in:
 src/et_downscaling/config.py
 ```
 
-This includes the analysis period, spatial resolution, Sentinel-2 quality threshold, Sentinel-1 orbit configuration, ERA5-Land search radius, sample asset, and output filename.
+This includes:
+
+- Analysis start and end dates
+- Spatial resolution and CRS
+- Sentinel-2 quality threshold
+- Sentinel-1 orbit configuration
+- ERA5-Land search radius
+- Sample asset
+- Output filename
 
 `START_DATE` is inclusive and `END_DATE` is exclusive.
 
