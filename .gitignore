@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Environments and secrets
+.venv/
+venv/
+env/
+.env
+.env.*
+credentials/
+secrets/
+service-account*.json
+
+# Generated outputs
+outputs/
+project_report.md
+
+# Local diagnostic and development scripts
+scripts/check_station_03.py
+scripts/test_local_download.py
+scripts/test_pipeline_download.py
+scripts/export_project_report.py
+
+# VS Code
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Operating system
+.DS_Store
+Thumbs.db

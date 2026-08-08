@@ -1,0 +1,9 @@
+name: et-fundacion
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.12
+  - earthengine-api=1.7.38
+  - pip
