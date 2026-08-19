@@ -116,6 +116,7 @@ BASE_EXPORT_COLUMNS = [
 
     "s2_dates_total",
     "s2_dates",
+    "s2_products_total",
     "s2_union_coverage_pct",
 
     "s1_dates_total",
@@ -202,6 +203,7 @@ BASE_PROPERTY_NAMES = [
 
     "s2_dates_total",
     "s2_dates",
+    "s2_products_total",
     "s2_union_coverage_pct",
 
     "s1_dates_total",

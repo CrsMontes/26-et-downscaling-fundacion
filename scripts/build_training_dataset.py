@@ -16,7 +16,7 @@ from et_downscaling.dataset import (
     build_availability_table,
     build_observations_with_stats,
     build_output_table,
-    get_valid_observations,
+    get_extraction_observations,
 )
 
 from et_downscaling.export import (
@@ -381,7 +381,7 @@ def main():
     )
 
     # ========================================================
-    # Build valid observation table
+    # Build availability table
     # ========================================================
 
     availability_table = (
@@ -392,8 +392,20 @@ def main():
         )
     )
 
-    valid_observations = (
-        get_valid_observations(
+    # ========================================================
+    # Select observations for predictor extraction
+    #
+    # Coverage thresholds for Sentinel-2 and Sentinel-1 are
+    # deliberately not applied here. Spatial coverage is
+    # preserved as continuous quality-control information.
+    #
+    # Extraction currently requires:
+    # - observation inside the analysis period;
+    # - valid MODIS ET target.
+    # ========================================================
+
+    extraction_observations = (
+        get_extraction_observations(
             availability_table
         )
     )
@@ -603,7 +615,7 @@ def main():
                 )
 
                 partition = (
-                    valid_observations
+                    extraction_observations
                     .filter(
                         ee.Filter.eq(
                             "station_id",
@@ -639,9 +651,14 @@ def main():
                     "Requesting local CSV..."
                 )
 
+                # Export the complete master table.
+                #
+                # Rows with incomplete predictors are retained
+                # and identified through the QC and missingness
+                # fields instead of being discarded here.
                 downloaded_path = (
                     export_training_dataset(
-                        output["final"],
+                        output["all"],
                         output_filename=(
                             f"_chunks/"
                             f"{OUTPUT_PERIOD_LABEL}/"
@@ -690,12 +707,12 @@ def main():
     )
 
     # ========================================================
-    # Validate final dataset
+    # Validate master dataset
     # ========================================================
 
     print()
     print(
-        "Final dataset summary:"
+        "Master dataset summary:"
     )
 
     print(
@@ -715,7 +732,7 @@ def main():
 
     if summary["total"] == 0:
         raise RuntimeError(
-            "Final dataset is empty."
+            "Master dataset is empty."
         )
 
     if (
@@ -726,7 +743,7 @@ def main():
         )
     ):
         raise RuntimeError(
-            "Final dataset contains rows "
+            "Master dataset contains rows "
             "with unexpected scale values."
         )
 
@@ -762,7 +779,7 @@ def main():
 
     print()
     print(
-        "Training dataset completed successfully."
+        "Master dataset completed successfully."
     )
 
     print(

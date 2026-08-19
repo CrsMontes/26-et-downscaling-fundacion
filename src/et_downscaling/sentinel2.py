@@ -129,6 +129,25 @@ def prepare_sentinel2(image):
 
 
 # ============================================================
+# Empty Sentinel-2 image
+# ============================================================
+
+def build_empty_s2_image():
+    return (
+        ee.Image.constant(
+            [0] * len(S2_BAND_NAMES)
+        )
+        .rename(
+            S2_BAND_NAMES
+        )
+        .updateMask(
+            ee.Image.constant(0)
+        )
+        .toFloat()
+    )
+
+
+# ============================================================
 # Daily Sentinel-2 mosaics
 # ============================================================
 
@@ -202,8 +221,18 @@ def build_s2_medoid(
         )
     )
 
+    safe_daily_images = (
+        daily_images.merge(
+            ee.ImageCollection(
+                [
+                    build_empty_s2_image(),
+                ]
+            )
+        )
+    )
+
     spectral_median = (
-        daily_images
+        safe_daily_images
         .select(S2_BAND_NAMES)
         .median()
     )
@@ -236,7 +265,7 @@ def build_s2_medoid(
         )
 
     scored_collection = (
-        daily_images.map(
+        safe_daily_images.map(
             score_image
         )
     )

@@ -379,7 +379,7 @@ def build_availability_table(
             )
 
             # ================================================
-            # Joint validity
+            # Joint validity - legacy baseline
             # ================================================
 
             valid_condition = (
@@ -469,6 +469,9 @@ def build_availability_table(
                             ";"
                         ),
 
+                    "s2_products_total":
+                        s2_period.size(),
+
                     "s2_union_coverage_pct":
                         s2_coverage
                         .multiply(100),
@@ -496,6 +499,15 @@ def build_availability_table(
 
                     "s1_valid":
                         s1_valid,
+
+                    "period_within_analysis":
+                        ee.Number(
+                            ee.Algorithms.If(
+                                period_within_analysis,
+                                1,
+                                0,
+                            )
+                        ),
 
                     "valid_observation":
                         valid_observation,
@@ -532,7 +544,7 @@ def build_availability_table(
 
 
 # ============================================================
-# Valid observations
+# Valid observations - legacy baseline
 # ============================================================
 
 def get_valid_observations(
@@ -545,6 +557,32 @@ def get_valid_observations(
         .filter(
             ee.Filter.eq(
                 "valid_observation",
+                1,
+            )
+        )
+    )
+
+
+# ============================================================
+# Extraction observations
+# ============================================================
+
+def get_extraction_observations(
+    availability_table,
+):
+    return (
+        ee.FeatureCollection(
+            availability_table
+        )
+        .filter(
+            ee.Filter.eq(
+                "period_within_analysis",
+                1,
+            )
+        )
+        .filter(
+            ee.Filter.eq(
+                "modis_good",
                 1,
             )
         )
@@ -621,7 +659,7 @@ def get_missing_stat_keys(
 
 
 # ============================================================
-# Calculate statistics for one valid observation
+# Calculate statistics for one observation
 # ============================================================
 
 def calculate_observation(
@@ -850,7 +888,7 @@ def calculate_observation(
 
 
 # ============================================================
-# Add statistics to valid observations
+# Add statistics to observations
 # ============================================================
 
 def build_observations_with_stats(
