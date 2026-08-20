@@ -18,6 +18,24 @@ STATION_FIELD = "Name"
 START_DATE = "2021-01-01"
 END_DATE = "2024-01-01"
 
+# ============================================================
+# MODIS MOD16A2GF
+# ============================================================
+
+MODIS_ET_SCALE_FACTOR = 0.1
+
+MODIS_ET_MIN_VALID_DN = 0
+MODIS_ET_MAX_VALID_DN = 32700
+
+MODIS_STRICT_SCF_MAX = 1
+
+# False:
+# MODIS validity is based on the ET value itself.
+# ET_QC is retained for traceability and sensitivity analyses.
+#
+# True:
+# Also require the legacy strict ET_QC criteria.
+MODIS_REQUIRE_STRICT_QC = False
 
 def _build_period_label():
     start_date = date.fromisoformat(
