@@ -1,5 +1,9 @@
 import ee
 
+from .albedo import (
+    add_s2_albedo,
+)
+
 from .config import (
     END_DATE,
     S2_CLEAR_THRESHOLD,
@@ -7,19 +11,29 @@ from .config import (
     START_DATE,
 )
 
-from .schema import (
-    S2_BAND_NAMES,
-    S2_SOURCE_BANDS,
+from .fvc import (
+    add_fvc_band,
 )
 
 
-S2_COLLECTION_ID = "COPERNICUS/S2_SR_HARMONIZED"
+# ============================================================
+# Sentinel-2 collections
+# ============================================================
+
+S2_COLLECTION_ID = (
+    "COPERNICUS/S2_SR_HARMONIZED"
+)
 
 CLOUD_SCORE_COLLECTION_ID = (
     "GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED"
 )
 
 
+# ============================================================
+# Sentinel-2 spectral configuration
+# ============================================================
+
+# Native 10 m bands.
 S2_10M_SOURCE_BANDS = [
     "B2",
     "B3",
@@ -35,6 +49,7 @@ S2_10M_BAND_NAMES = [
 ]
 
 
+# Native 20 m bands.
 S2_20M_SOURCE_BANDS = [
     "B5",
     "B6",
@@ -54,7 +69,26 @@ S2_20M_BAND_NAMES = [
 ]
 
 
-S2_MEDOID_BANDS = [
+# Final reflectance stack at common 20 m support.
+S2_REFLECTANCE_BANDS = [
+    "Blue",
+    "Green",
+    "Red",
+    "RedEdge1",
+    "RedEdge2",
+    "RedEdge3",
+    "NIR_Broad",
+    "NIR",
+    "SWIR1",
+    "SWIR2",
+]
+
+
+# B8 and B8A both describe the NIR region.
+# NIR_Broad (B8) is retained as a predictor and for albedo,
+# but it is excluded from the medoid distance to avoid
+# double-weighting NIR information.
+S2_MEDOID_SCORE_BANDS = [
     "Blue",
     "Green",
     "Red",
@@ -67,22 +101,6 @@ S2_MEDOID_BANDS = [
 ]
 
 
-S2_INDEX_BANDS = [
-    "NDVI",
-    "EVI",
-    "SAVI",
-    "NDWI",
-    "NDMI",
-    "NDRE",
-]
-
-
-S2_PREDICTOR_BANDS = (
-    S2_BAND_NAMES
-    + S2_INDEX_BANDS
-)
-
-
 # ============================================================
 # Add date key
 # ============================================================
@@ -93,7 +111,9 @@ def _add_date_key(image):
     return ee.Image(
         image.set(
             "date_key",
-            image.date().format("yyyy-MM-dd"),
+            image.date().format(
+                "yyyy-MM-dd"
+            ),
         )
     )
 
@@ -105,13 +125,20 @@ def _add_date_key(image):
 def get_sentinel2_collection(
     station_footprints,
 ):
-    geometry = station_footprints.geometry()
+    geometry = (
+        ee.FeatureCollection(
+            station_footprints
+        )
+        .geometry()
+    )
 
     s2_raw = (
         ee.ImageCollection(
             S2_COLLECTION_ID
         )
-        .filterBounds(geometry)
+        .filterBounds(
+            geometry
+        )
         .filterDate(
             START_DATE,
             END_DATE,
@@ -122,7 +149,9 @@ def get_sentinel2_collection(
         ee.ImageCollection(
             CLOUD_SCORE_COLLECTION_ID
         )
-        .filterBounds(geometry)
+        .filterBounds(
+            geometry
+        )
         .filterDate(
             START_DATE,
             END_DATE,
@@ -133,78 +162,67 @@ def get_sentinel2_collection(
         s2_raw
         .linkCollection(
             cloud_score,
-            [S2_QA_BAND],
+            [
+                S2_QA_BAND,
+            ],
         )
-        .map(_add_date_key)
+        .map(
+            _add_date_key
+        )
     )
 
 
 # ============================================================
-# Aggregate 10 m image to native 20 m grid
+# Aggregate 10 m bands to the native 20 m grid
 # ============================================================
 
-def _aggregate_mean_to_20m(
+def _aggregate_10m_reflectance_to_20m(
     image,
-    target_projection,
+    reference_projection,
 ):
+    image = ee.Image(
+        image
+    )
+
+    reflectance_10m = (
+        image
+        .select(
+            S2_10M_SOURCE_BANDS,
+            S2_10M_BAND_NAMES,
+        )
+        .multiply(
+            0.0001
+        )
+        .toFloat()
+    )
+
     return (
-        ee.Image(image)
+        reflectance_10m
         .reduceResolution(
             reducer=ee.Reducer.mean(),
-            bestEffort=False,
-            maxPixels=16,
+            maxPixels=4,
         )
         .reproject(
-            crs=target_projection
+            reference_projection
         )
+        .toFloat()
     )
 
 
 # ============================================================
-# Require full 2 x 2 valid support
+# Build strict 20 m clear-sky mask
 # ============================================================
 
-def _aggregate_full_validity_to_20m(
-    valid_10m,
-    target_projection,
+def _build_20m_clear_mask(
+    image,
+    reference_projection,
 ):
-    return (
-        ee.Image(valid_10m)
-        .unmask(0)
-        .reduceResolution(
-            reducer=ee.Reducer.min(),
-            bestEffort=False,
-            maxPixels=16,
-        )
-        .reproject(
-            crs=target_projection
-        )
-        .eq(1)
-    )
-
-
-# ============================================================
-# Prepare Sentinel-2 at 20 m
-# ============================================================
-
-def prepare_sentinel2(image):
-    image = ee.Image(image)
-
-    target_projection = (
+    image = ee.Image(
         image
-        .select("B8A")
-        .projection()
     )
 
-    clear_10m = (
-        image
-        .select(S2_QA_BAND)
-        .gte(
-            S2_CLEAR_THRESHOLD
-        )
-    )
-
-    spectral_valid_10m = (
+    # All required 10 m spectral bands must exist.
+    valid_10m_spectral = (
         image
         .select(
             S2_10M_SOURCE_BANDS
@@ -215,19 +233,55 @@ def prepare_sentinel2(image):
         )
     )
 
-    valid_10m = (
-        spectral_valid_10m
-        .And(clear_10m)
+    # Cloud Score+ must also exist.
+    valid_qa = (
+        image
+        .select(
+            S2_QA_BAND
+        )
+        .mask()
     )
 
-    full_valid_20m = (
-        _aggregate_full_validity_to_20m(
-            valid_10m,
-            target_projection,
+    clear_10m = (
+        image
+        .select(
+            S2_QA_BAND
+        )
+        .gte(
+            S2_CLEAR_THRESHOLD
         )
     )
 
-    spectral_valid_20m = (
+    valid_clear_10m = (
+        valid_10m_spectral
+        .And(
+            valid_qa
+        )
+        .And(
+            clear_10m
+        )
+        .unmask(0)
+        .rename(
+            "valid_clear_10m"
+        )
+    )
+
+    # A 20 m output pixel is accepted only when all
+    # four nested 10 m subpixels are clear and valid.
+    all_clear_20m = (
+        valid_clear_10m
+        .reduceResolution(
+            reducer=ee.Reducer.min(),
+            maxPixels=4,
+        )
+        .reproject(
+            reference_projection
+        )
+        .eq(1)
+    )
+
+    # Native 20 m bands must also contain valid data.
+    valid_20m_spectral = (
         image
         .select(
             S2_20M_SOURCE_BANDS
@@ -236,66 +290,86 @@ def prepare_sentinel2(image):
         .reduce(
             ee.Reducer.min()
         )
-        .unmask(0)
         .reproject(
-            crs=target_projection
+            reference_projection
         )
-        .eq(1)
     )
 
-    final_valid_mask = (
-        full_valid_20m
+    return (
+        all_clear_20m
         .And(
-            spectral_valid_20m
+            valid_20m_spectral
+        )
+        .rename(
+            "valid_20m"
         )
     )
 
-    reflectance_10m = (
+
+# ============================================================
+# Prepare Sentinel-2
+# ============================================================
+
+def prepare_sentinel2(image):
+    image = ee.Image(
+        image
+    )
+
+    # B8A is native 20 m and defines the common grid.
+    reference_projection = (
         image
         .select(
-            S2_10M_SOURCE_BANDS,
-            S2_10M_BAND_NAMES,
+            "B8A"
         )
-        .multiply(0.0001)
-        .toFloat()
+        .projection()
     )
 
-    reflectance_10m_to_20m = (
-        _aggregate_mean_to_20m(
-            reflectance_10m,
-            target_projection,
+    reflectance_from_10m = (
+        _aggregate_10m_reflectance_to_20m(
+            image,
+            reference_projection,
         )
     )
 
-    reflectance_20m = (
+    reflectance_native_20m = (
         image
         .select(
             S2_20M_SOURCE_BANDS,
             S2_20M_BAND_NAMES,
         )
-        .multiply(0.0001)
-        .toFloat()
+        .multiply(
+            0.0001
+        )
         .reproject(
-            crs=target_projection
+            reference_projection
+        )
+        .toFloat()
+    )
+
+    clear_mask_20m = (
+        _build_20m_clear_mask(
+            image,
+            reference_projection,
         )
     )
 
     reflectance = (
-        reflectance_10m_to_20m
+        reflectance_from_10m
         .addBands(
-            reflectance_20m
+            reflectance_native_20m
         )
         .select(
-            S2_BAND_NAMES
+            S2_REFLECTANCE_BANDS
         )
         .updateMask(
-            final_valid_mask
+            clear_mask_20m
         )
         .toFloat()
     )
 
     return ee.Image(
-        reflectance.copyProperties(
+        reflectance
+        .copyProperties(
             image,
             [
                 "system:time_start",
@@ -314,13 +388,20 @@ def prepare_sentinel2(image):
 def build_empty_s2_image():
     return (
         ee.Image.constant(
-            [0] * len(S2_BAND_NAMES)
+            [
+                0,
+            ]
+            * len(
+                S2_REFLECTANCE_BANDS
+            )
         )
         .rename(
-            S2_BAND_NAMES
+            S2_REFLECTANCE_BANDS
         )
         .updateMask(
-            ee.Image.constant(0)
+            ee.Image.constant(
+                0
+            )
         )
         .toFloat()
     )
@@ -334,13 +415,16 @@ def build_s2_daily_collection(
     s2_period,
     geometry,
 ):
-    s2_period = ee.ImageCollection(
-        s2_period
+    s2_period = (
+        ee.ImageCollection(
+            s2_period
+        )
     )
 
     date_keys = (
         ee.List(
-            s2_period.aggregate_array(
+            s2_period
+            .aggregate_array(
                 "date_key"
             )
         )
@@ -348,9 +432,13 @@ def build_s2_daily_collection(
         .sort()
     )
 
-    def build_daily_image(date_key):
-        date_key = ee.String(
-            date_key
+    def build_daily_image(
+        date_key,
+    ):
+        date_key = (
+            ee.String(
+                date_key
+            )
         )
 
         same_date = (
@@ -370,7 +458,12 @@ def build_s2_daily_collection(
             same_date
             .mosaic()
             .clip(
-                geometry.buffer(100)
+                ee.Geometry(
+                    geometry
+                )
+                .buffer(
+                    100
+                )
             )
             .set(
                 "date_key",
@@ -379,7 +472,8 @@ def build_s2_daily_collection(
         )
 
     return (
-        ee.ImageCollection.fromImages(
+        ee.ImageCollection
+        .fromImages(
             date_keys.map(
                 build_daily_image
             )
@@ -402,8 +496,11 @@ def build_s2_medoid(
         )
     )
 
+    # Add a fully masked image so empty periods return
+    # the expected band structure instead of failing.
     safe_daily_images = (
-        daily_images.merge(
+        daily_images
+        .merge(
             ee.ImageCollection(
                 [
                     build_empty_s2_image(),
@@ -415,18 +512,22 @@ def build_s2_medoid(
     spectral_median = (
         safe_daily_images
         .select(
-            S2_MEDOID_BANDS
+            S2_MEDOID_SCORE_BANDS
         )
         .median()
     )
 
-    def score_image(image):
-        image = ee.Image(image)
+    def score_image(
+        image,
+    ):
+        image = ee.Image(
+            image
+        )
 
         squared_distance = (
             image
             .select(
-                S2_MEDOID_BANDS
+                S2_MEDOID_SCORE_BANDS
             )
             .subtract(
                 spectral_median
@@ -439,18 +540,24 @@ def build_s2_medoid(
 
         medoid_score = (
             squared_distance
-            .multiply(-1)
+            .multiply(
+                -1
+            )
             .rename(
                 "medoid_score"
             )
         )
 
-        return image.addBands(
-            medoid_score
+        return (
+            image
+            .addBands(
+                medoid_score
+            )
         )
 
     scored_collection = (
-        safe_daily_images.map(
+        safe_daily_images
+        .map(
             score_image
         )
     )
@@ -461,7 +568,7 @@ def build_s2_medoid(
             "medoid_score"
         )
         .select(
-            S2_BAND_NAMES
+            S2_REFLECTANCE_BANDS
         )
         .toFloat()
     )
@@ -474,7 +581,7 @@ def build_s2_medoid(
 def _safe_ratio(
     numerator,
     denominator,
-    band_name,
+    output_name,
     epsilon=1e-6,
 ):
     numerator = ee.Image(
@@ -485,95 +592,175 @@ def _safe_ratio(
         denominator
     )
 
-    valid_denominator = (
-        denominator
-        .abs()
-        .gt(epsilon)
-    )
-
     return (
         numerator
         .divide(
             denominator
         )
         .updateMask(
-            valid_denominator
+            denominator
+            .abs()
+            .gt(
+                epsilon
+            )
         )
         .rename(
-            band_name
+            output_name
         )
         .toFloat()
     )
 
 
 # ============================================================
-# Sentinel-2 spectral indices
+# Sentinel-2 spectral indices + FVC + albedo
 # ============================================================
 
 def add_s2_indices(image):
-    image = ee.Image(image)
+    image = ee.Image(
+        image
+    )
 
-    blue = image.select("Blue")
-    green = image.select("Green")
-    red = image.select("Red")
-    red_edge_1 = image.select("RedEdge1")
-    nir = image.select("NIR")
-    swir1 = image.select("SWIR1")
+    blue = image.select(
+        "Blue"
+    )
+
+    green = image.select(
+        "Green"
+    )
+
+    red = image.select(
+        "Red"
+    )
+
+    red_edge_1 = image.select(
+        "RedEdge1"
+    )
+
+    nir = image.select(
+        "NIR"
+    )
+
+    swir1 = image.select(
+        "SWIR1"
+    )
+
+
+    # ========================================================
+    # NDVI
+    # ========================================================
 
     ndvi = _safe_ratio(
-        nir.subtract(red),
-        nir.add(red),
+        nir.subtract(
+            red
+        ),
+        nir.add(
+            red
+        ),
         "NDVI",
     )
 
+
+    # ========================================================
+    # EVI
+    # ========================================================
+
     evi = _safe_ratio(
         nir
-        .subtract(red)
-        .multiply(2.5),
-        (
-            nir
-            .add(
-                red.multiply(6.0)
+        .subtract(
+            red
+        )
+        .multiply(
+            2.5
+        ),
+        nir
+        .add(
+            red.multiply(
+                6.0
             )
-            .subtract(
-                blue.multiply(7.5)
+        )
+        .subtract(
+            blue.multiply(
+                7.5
             )
-            .add(1.0)
+        )
+        .add(
+            1.0
         ),
         "EVI",
     )
 
+
+    # ========================================================
+    # SAVI
+    # L = 0.5
+    # ========================================================
+
     savi = _safe_ratio(
         nir
-        .subtract(red)
-        .multiply(1.5),
-        (
-            nir
-            .add(red)
-            .add(0.5)
+        .subtract(
+            red
+        )
+        .multiply(
+            1.5
+        ),
+        nir
+        .add(
+            red
+        )
+        .add(
+            0.5
         ),
         "SAVI",
     )
 
+
+    # ========================================================
+    # NDWI
+    # McFeeters: Green - NIR
+    # ========================================================
+
     ndwi = _safe_ratio(
-        green.subtract(nir),
-        green.add(nir),
+        green.subtract(
+            nir
+        ),
+        green.add(
+            nir
+        ),
         "NDWI",
     )
 
+
+    # ========================================================
+    # NDMI
+    # ========================================================
+
     ndmi = _safe_ratio(
-        nir.subtract(swir1),
-        nir.add(swir1),
+        nir.subtract(
+            swir1
+        ),
+        nir.add(
+            swir1
+        ),
         "NDMI",
     )
 
+
+    # ========================================================
+    # NDRE
+    # ========================================================
+
     ndre = _safe_ratio(
-        nir.subtract(red_edge_1),
-        nir.add(red_edge_1),
+        nir.subtract(
+            red_edge_1
+        ),
+        nir.add(
+            red_edge_1
+        ),
         "NDRE",
     )
 
-    return (
+
+    image_with_indices = (
         image
         .addBands(
             [
@@ -585,26 +772,29 @@ def add_s2_indices(image):
                 ndre,
             ]
         )
-        .select(
-            S2_PREDICTOR_BANDS
-        )
         .toFloat()
     )
 
 
-# ============================================================
-# Sentinel-2 predictors
-# ============================================================
+    # ========================================================
+    # Fractional vegetation cover
+    # ========================================================
 
-def build_s2_predictors(
-    s2_period,
-    geometry,
-):
-    medoid = build_s2_medoid(
-        s2_period,
-        geometry,
+    image_with_fvc = (
+        add_fvc_band(
+            image_with_indices,
+            source="S2",
+        )
     )
 
-    return add_s2_indices(
-        medoid
+
+    # ========================================================
+    # Shortwave broadband surface albedo
+    # ========================================================
+
+    return (
+        add_s2_albedo(
+            image_with_fvc
+        )
+        .toFloat()
     )

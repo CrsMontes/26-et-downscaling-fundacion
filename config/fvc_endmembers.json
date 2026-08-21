@@ -1,19 +1,26 @@
 {
   "calibration_name": "fvc_global_ndvi_endmembers",
+  "calibration_scope": "external_diagnostic_prerequisite",
   "method": "two_stage_global_percentile",
   "coverage_threshold_pct": 80.0,
+  "coverage_bands": [
+    "Green",
+    "Red",
+    "NIR"
+  ],
   "water_exclusion": {
     "index": "NDWI",
     "rule": "exclude NDWI > 0"
   },
   "within_footprint_period": {
-    "low_candidate": "NDVI_p05",
-    "high_candidate": "NDVI_p95"
+    "low_candidate_percentile": 5,
+    "high_candidate_percentile": 95
   },
   "across_all_valid_observations": {
     "low_quantile": 0.05,
     "high_quantile": 0.95,
-    "temporal_scheme": "global"
+    "temporal_scheme": "global",
+    "sources_calibrated_separately": true
   },
   "calibration_period": {
     "start": "2021-01-01",
@@ -21,14 +28,14 @@
   },
   "sources": {
     "HLS": {
-      "ndvi_low_endmember": 0.4163919555733753,
-      "ndvi_high_endmember": 0.9083625164465531,
+      "ndvi_low_endmember": 0.4163919518084051,
+      "ndvi_high_endmember": 0.9083625163105443,
       "n_observations": 434,
       "n_stations": 5
     },
     "S2": {
-      "ndvi_low_endmember": 0.30906053079398427,
-      "ndvi_high_endmember": 0.9240448254540803,
+      "ndvi_low_endmember": 0.30906052790151156,
+      "ndvi_high_endmember": 0.9240448371180946,
       "n_observations": 498,
       "n_stations": 5
     }

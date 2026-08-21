@@ -1,8 +1,16 @@
 import ee
 
+from .albedo import (
+    add_hls_albedo,
+)
+
 from .config import (
     END_DATE,
     START_DATE,
+)
+
+from .fvc import (
+    add_fvc_band,
 )
 
 
@@ -10,19 +18,17 @@ from .config import (
 # HLS collections
 # ============================================================
 
-HLS_S30_COLLECTION_ID = "NASA/HLS/HLSS30/v002"
-HLS_L30_COLLECTION_ID = "NASA/HLS/HLSL30/v002"
+HLS_S30_COLLECTION_ID = (
+    "NASA/HLS/HLSS30/v002"
+)
 
-HLS_S30_SENSOR = "HLS_S30"
-HLS_L30_SENSOR = "HLS_L30"
-
-HLS_SENSOR_PROPERTY = "hls_sensor"
-HLS_DATE_PROPERTY = "date_key"
-HLS_ACQUISITION_PROPERTY = "acquisition_key"
+HLS_L30_COLLECTION_ID = (
+    "NASA/HLS/HLSL30/v002"
+)
 
 
 # ============================================================
-# Common HLS spectral space
+# HLS standardized spectral configuration
 # ============================================================
 
 HLS_REFLECTANCE_BANDS = [
@@ -36,6 +42,7 @@ HLS_REFLECTANCE_BANDS = [
 ]
 
 
+# Sentinel-2-derived HLS S30 bands.
 HLS_S30_SOURCE_BANDS = [
     "B1",
     "B2",
@@ -47,6 +54,7 @@ HLS_S30_SOURCE_BANDS = [
 ]
 
 
+# Landsat-derived HLS L30 bands.
 HLS_L30_SOURCE_BANDS = [
     "B1",
     "B2",
@@ -58,9 +66,10 @@ HLS_L30_SOURCE_BANDS = [
 ]
 
 
-# These are the bands used by the HLS-derived indices.
-# Coastal is intentionally excluded from the positivity QA.
-HLS_INDEX_REFLECTANCE_BANDS = [
+# Coastal is deliberately excluded from the positivity test.
+# It is retained as a predictor, but small negative Coastal
+# reflectances can be valid in HLS.
+HLS_POSITIVE_BANDS = [
     "Blue",
     "Green",
     "Red",
@@ -70,65 +79,60 @@ HLS_INDEX_REFLECTANCE_BANDS = [
 ]
 
 
-HLS_INDEX_BANDS = [
-    "NDVI",
-    "EVI",
-    "SAVI",
-    "NDWI",
-    "NDMI",
-]
-
-
-HLS_PREDICTOR_BANDS = (
-    HLS_REFLECTANCE_BANDS
-    + HLS_INDEX_BANDS
+# All seven harmonized bands participate in the HLS medoid.
+HLS_MEDOID_SCORE_BANDS = (
+    HLS_REFLECTANCE_BANDS.copy()
 )
 
 
 # ============================================================
-# Metadata
+# HLS Fmask configuration
 # ============================================================
 
-def _add_hls_metadata(
+# HLS Fmask bits used for masking:
+#
+# Bit 1: cloud
+# Bit 2: adjacent to cloud/shadow
+# Bit 3: cloud shadow
+# Bit 4: snow/ice
+#
+# Bit 5 (water) is deliberately retained.
+# Bits 6-7 (aerosol level) are not used as hard filters.
+
+HLS_FMASK_CLOUD_BIT = 1
+HLS_FMASK_ADJACENT_BIT = 2
+HLS_FMASK_SHADOW_BIT = 3
+HLS_FMASK_SNOW_BIT = 4
+
+
+# ============================================================
+# Add HLS source metadata
+# ============================================================
+
+def _set_hls_metadata(
     image,
-    sensor_name,
+    sensor,
 ):
-    image = ee.Image(image)
-
-    date_key = (
+    image = ee.Image(
         image
-        .date()
-        .format("yyyy-MM-dd")
     )
 
-    acquisition_key = (
-        ee.String(sensor_name)
-        .cat("_")
-        .cat(date_key)
-    )
-
-    return ee.Image(
-        image.set(
-            {
-                HLS_SENSOR_PROPERTY: sensor_name,
-                HLS_DATE_PROPERTY: date_key,
-                HLS_ACQUISITION_PROPERTY: acquisition_key,
-            }
+    return (
+        image
+        .set(
+            "sensor",
+            sensor,
         )
-    )
-
-
-def _tag_hls_s30(image):
-    return _add_hls_metadata(
-        image,
-        HLS_S30_SENSOR,
-    )
-
-
-def _tag_hls_l30(image):
-    return _add_hls_metadata(
-        image,
-        HLS_L30_SENSOR,
+        .set(
+            "hls_sensor",
+            sensor,
+        )
+        .set(
+            "date_key",
+            image.date().format(
+                "yyyy-MM-dd"
+            ),
+        )
     )
 
 
@@ -140,11 +144,13 @@ def get_hls_collection(
     station_footprints,
 ):
     geometry = (
-        station_footprints
+        ee.FeatureCollection(
+            station_footprints
+        )
         .geometry()
     )
 
-    s30 = (
+    s30_collection = (
         ee.ImageCollection(
             HLS_S30_COLLECTION_ID
         )
@@ -156,11 +162,15 @@ def get_hls_collection(
             END_DATE,
         )
         .map(
-            _tag_hls_s30
+            lambda image:
+                _set_hls_metadata(
+                    image,
+                    "S30",
+                )
         )
     )
 
-    l30 = (
+    l30_collection = (
         ee.ImageCollection(
             HLS_L30_COLLECTION_ID
         )
@@ -172,13 +182,19 @@ def get_hls_collection(
             END_DATE,
         )
         .map(
-            _tag_hls_l30
+            lambda image:
+                _set_hls_metadata(
+                    image,
+                    "L30",
+                )
         )
     )
 
     return (
-        s30
-        .merge(l30)
+        s30_collection
+        .merge(
+            l30_collection
+        )
         .sort(
             "system:time_start"
         )
@@ -186,55 +202,70 @@ def get_hls_collection(
 
 
 # ============================================================
-# HLS Fmask
+# HLS clear-sky mask
 # ============================================================
 
-def build_hls_clear_mask(image):
-    image = ee.Image(image)
+def _build_hls_fmask_clear_mask(
+    image,
+):
+    image = ee.Image(
+        image
+    )
 
     fmask = (
         image
-        .select("Fmask")
+        .select(
+            "Fmask"
+        )
     )
 
-    cloud_clear = (
+    no_cloud = (
         fmask
         .bitwiseAnd(
-            1 << 1
+            1
+            << HLS_FMASK_CLOUD_BIT
         )
         .eq(0)
     )
 
-    adjacent_clear = (
+    no_adjacent = (
         fmask
         .bitwiseAnd(
-            1 << 2
+            1
+            << HLS_FMASK_ADJACENT_BIT
         )
         .eq(0)
     )
 
-    shadow_clear = (
+    no_shadow = (
         fmask
         .bitwiseAnd(
-            1 << 3
+            1
+            << HLS_FMASK_SHADOW_BIT
         )
         .eq(0)
     )
 
-    snow_clear = (
+    no_snow = (
         fmask
         .bitwiseAnd(
-            1 << 4
+            1
+            << HLS_FMASK_SNOW_BIT
         )
         .eq(0)
     )
 
     return (
-        cloud_clear
-        .And(adjacent_clear)
-        .And(shadow_clear)
-        .And(snow_clear)
-        .unmask(0)
+        no_cloud
+        .And(
+            no_adjacent
+        )
+        .And(
+            no_shadow
+        )
+        .And(
+            no_snow
+        )
         .rename(
             "hls_clear"
         )
@@ -242,140 +273,110 @@ def build_hls_clear_mask(image):
 
 
 # ============================================================
-# Positive-reflectance QA
+# Prepare standardized HLS image
 # ============================================================
 
-def build_hls_positive_reflectance_mask(
-    reflectance,
+def _prepare_hls_image(
+    image,
+    source_bands,
 ):
-    reflectance = ee.Image(
-        reflectance
+    image = ee.Image(
+        image
     )
 
-    return (
+    reflectance = (
+        image
+        .select(
+            source_bands,
+            HLS_REFLECTANCE_BANDS,
+        )
+        .toFloat()
+    )
+
+    # All seven source bands must contain valid data.
+    spectral_valid = (
+        reflectance
+        .mask()
+        .reduce(
+            ee.Reducer.min()
+        )
+    )
+
+    # Physically problematic non-positive reflectances are
+    # removed only from bands required by the derived indices.
+    # Coastal is deliberately not included in this test.
+    positive_reflectance = (
         reflectance
         .select(
-            HLS_INDEX_REFLECTANCE_BANDS
+            HLS_POSITIVE_BANDS
         )
         .gt(0)
         .reduce(
             ee.Reducer.min()
         )
-        .rename(
-            "hls_positive_reflectance"
-        )
     )
 
-
-# ============================================================
-# Standardize one HLS product
-# ============================================================
-
-def prepare_hls(image):
-    image = ee.Image(image)
-
-    sensor = ee.String(
-        image.get(
-            HLS_SENSOR_PROPERTY
-        )
-    )
-
-    is_s30 = (
-        sensor
-        .compareTo(
-            HLS_S30_SENSOR
-        )
-        .eq(0)
-    )
-
-    reflectance = ee.Image(
-        ee.Algorithms.If(
-            is_s30,
-            image.select(
-                HLS_S30_SOURCE_BANDS,
-                HLS_REFLECTANCE_BANDS,
-            ),
-            image.select(
-                HLS_L30_SOURCE_BANDS,
-                HLS_REFLECTANCE_BANDS,
-            ),
-        )
-    ).toFloat()
-
-    # Require all seven common reflectance bands to exist.
-    spectral_valid_mask = (
-        reflectance
-        .mask()
-        .unmask(0)
-        .reduce(
-            ee.Reducer.min()
-        )
-        .eq(1)
-    )
-
-    # Apply the HLS Fmask QA first.
     clear_mask = (
-        build_hls_clear_mask(
+        _build_hls_fmask_clear_mask(
             image
         )
     )
 
-    reflectance = (
-        reflectance
-        .updateMask(
-            spectral_valid_mask
+    valid_mask = (
+        spectral_valid
+        .And(
+            positive_reflectance
         )
-        .updateMask(
+        .And(
             clear_mask
         )
     )
 
-    # Exclude acquisition pixels with non-positive reflectance
-    # in any band required by the derived indices.
-    #
-    # Coastal is deliberately not part of this condition.
-    positive_reflectance_mask = (
-        build_hls_positive_reflectance_mask(
-            reflectance
-        )
-    )
-
-    reflectance = (
+    return (
         reflectance
         .updateMask(
-            positive_reflectance_mask
+            valid_mask
+        )
+        .copyProperties(
+            image,
+            [
+                "system:time_start",
+                "system:index",
+                "sensor",
+                "hls_sensor",
+                "date_key",
+            ],
         )
         .toFloat()
     )
 
-    return ee.Image(
-        reflectance
-        .copyProperties(
-            image
+
+# ============================================================
+# Prepare HLS S30
+# ============================================================
+
+def prepare_hls_s30(
+    image,
+):
+    return (
+        _prepare_hls_image(
+            image,
+            HLS_S30_SOURCE_BANDS,
         )
-        .set(
-            "system:time_start",
-            image.get(
-                "system:time_start"
-            ),
-        )
-        .set(
-            HLS_SENSOR_PROPERTY,
-            image.get(
-                HLS_SENSOR_PROPERTY
-            ),
-        )
-        .set(
-            HLS_DATE_PROPERTY,
-            image.get(
-                HLS_DATE_PROPERTY
-            ),
-        )
-        .set(
-            HLS_ACQUISITION_PROPERTY,
-            image.get(
-                HLS_ACQUISITION_PROPERTY
-            ),
+    )
+
+
+# ============================================================
+# Prepare HLS L30
+# ============================================================
+
+def prepare_hls_l30(
+    image,
+):
+    return (
+        _prepare_hls_image(
+            image,
+            HLS_L30_SOURCE_BANDS,
         )
     )
 
@@ -387,7 +388,9 @@ def prepare_hls(image):
 def build_empty_hls_image():
     return (
         ee.Image.constant(
-            [0]
+            [
+                0,
+            ]
             * len(
                 HLS_REFLECTANCE_BANDS
             )
@@ -396,205 +399,187 @@ def build_empty_hls_image():
             HLS_REFLECTANCE_BANDS
         )
         .updateMask(
-            ee.Image.constant(0)
+            ee.Image.constant(
+                0
+            )
         )
         .toFloat()
     )
 
 
 # ============================================================
-# Build one mosaic per sensor and acquisition date
+# Daily HLS mosaics for one sensor
 # ============================================================
 
-def build_hls_acquisition_collection(
+def _build_hls_sensor_daily_collection(
     hls_period,
     geometry,
+    sensor,
 ):
-    hls_period = ee.ImageCollection(
-        hls_period
+    hls_period = (
+        ee.ImageCollection(
+            hls_period
+        )
+        .filter(
+            ee.Filter.eq(
+                "sensor",
+                sensor,
+            )
+        )
     )
 
-    acquisition_keys = (
+    date_keys = (
         ee.List(
             hls_period
             .aggregate_array(
-                HLS_ACQUISITION_PROPERTY
+                "date_key"
             )
         )
         .distinct()
         .sort()
     )
 
-    def build_acquisition(
-        acquisition_key,
-    ):
-        acquisition_key = ee.String(
-            acquisition_key
+    if sensor == "S30":
+        preparation_function = (
+            prepare_hls_s30
         )
 
-        same_acquisition = (
+    elif sensor == "L30":
+        preparation_function = (
+            prepare_hls_l30
+        )
+
+    else:
+        raise ValueError(
+            "Unsupported HLS sensor: "
+            f"{sensor}"
+        )
+
+    def build_daily_image(
+        date_key,
+    ):
+        date_key = (
+            ee.String(
+                date_key
+            )
+        )
+
+        same_date = (
             hls_period
             .filter(
                 ee.Filter.eq(
-                    HLS_ACQUISITION_PROPERTY,
-                    acquisition_key,
+                    "date_key",
+                    date_key,
                 )
             )
             .map(
-                prepare_hls
+                preparation_function
             )
         )
 
-        first_image = ee.Image(
-            same_acquisition
-            .first()
-        )
-
-        reference_projection = (
-            first_image
-            .select("Coastal")
-            .projection()
-        )
-
-        acquisition_mosaic = (
-            same_acquisition
+        daily_mosaic = (
+            same_date
             .mosaic()
-            .setDefaultProjection(
-                reference_projection
-            )
             .clip(
-                geometry.buffer(100)
-            )
-            .set(
-                HLS_ACQUISITION_PROPERTY,
-                acquisition_key,
-            )
-            .set(
-                HLS_DATE_PROPERTY,
-                first_image.get(
-                    HLS_DATE_PROPERTY
-                ),
-            )
-            .set(
-                HLS_SENSOR_PROPERTY,
-                first_image.get(
-                    HLS_SENSOR_PROPERTY
-                ),
-            )
-            .set(
-                "system:time_start",
-                first_image.get(
-                    "system:time_start"
-                ),
-            )
-            .set(
-                "hls_products_in_acquisition",
-                same_acquisition.size(),
+                ee.Geometry(
+                    geometry
+                )
+                .buffer(
+                    100
+                )
             )
         )
 
-        return acquisition_mosaic
+        return (
+            daily_mosaic
+            .set(
+                {
+                    "date_key":
+                        date_key,
+
+                    "sensor":
+                        sensor,
+
+                    "hls_sensor":
+                        sensor,
+                }
+            )
+        )
 
     return (
-        ee.ImageCollection.fromImages(
-            acquisition_keys.map(
-                build_acquisition
+        ee.ImageCollection
+        .fromImages(
+            date_keys.map(
+                build_daily_image
             )
-        )
-        .sort(
-            "system:time_start"
         )
     )
 
 
 # ============================================================
-# Union coverage mask
+# Combined daily HLS collection
 # ============================================================
 
-def build_hls_union_mask(
+def build_hls_daily_collection(
     hls_period,
     geometry,
 ):
-    acquisitions = (
-        build_hls_acquisition_collection(
+    hls_period = (
+        ee.ImageCollection(
+            hls_period
+        )
+    )
+
+    s30_daily = (
+        _build_hls_sensor_daily_collection(
             hls_period,
             geometry,
+            "S30",
         )
     )
 
-    def acquisition_mask(image):
-        image = ee.Image(image)
-
-        return (
-            image
-            .select("Blue")
-            .mask()
-            .gt(0)
-            .unmask(0)
-            .rename(
-                "hls_union_mask"
-            )
-            .toByte()
-        )
-
-    valid_masks = (
-        acquisitions
-        .map(
-            acquisition_mask
+    l30_daily = (
+        _build_hls_sensor_daily_collection(
+            hls_period,
+            geometry,
+            "L30",
         )
     )
 
-    empty_mask = (
-        ee.Image.constant(0)
-        .rename(
-            "hls_union_mask"
-        )
-        .toByte()
-    )
-
-    safe_masks = (
-        valid_masks
-        .merge(
-            ee.ImageCollection.fromImages(
-                [
-                    empty_mask,
-                ]
-            )
-        )
-    )
-
+    # S30 and L30 remain separate acquisition-level daily
+    # mosaics. They jointly compete in the temporal medoid.
     return (
-        safe_masks
-        .max()
-        .rename(
-            "hls_union_mask"
+        s30_daily
+        .merge(
+            l30_daily
         )
-        .clip(
-            geometry.buffer(100)
+        .sort(
+            "date_key"
         )
-        .toByte()
     )
 
 
 # ============================================================
-# HLS medoid
+# HLS temporal medoid
 # ============================================================
 
 def build_hls_medoid(
     hls_period,
     geometry,
 ):
-    acquisitions = (
-        build_hls_acquisition_collection(
+    daily_images = (
+        build_hls_daily_collection(
             hls_period,
             geometry,
         )
     )
 
-    safe_acquisitions = (
-        acquisitions
+    # Fully masked fallback guarantees a stable output band
+    # structure for periods without valid HLS observations.
+    safe_daily_images = (
+        daily_images
         .merge(
-            ee.ImageCollection.fromImages(
+            ee.ImageCollection(
                 [
                     build_empty_hls_image(),
                 ]
@@ -603,20 +588,24 @@ def build_hls_medoid(
     )
 
     spectral_median = (
-        safe_acquisitions
+        safe_daily_images
         .select(
-            HLS_REFLECTANCE_BANDS
+            HLS_MEDOID_SCORE_BANDS
         )
         .median()
     )
 
-    def score_image(image):
-        image = ee.Image(image)
+    def score_image(
+        image,
+    ):
+        image = ee.Image(
+            image
+        )
 
         squared_distance = (
             image
             .select(
-                HLS_REFLECTANCE_BANDS
+                HLS_MEDOID_SCORE_BANDS
             )
             .subtract(
                 spectral_median
@@ -629,7 +618,9 @@ def build_hls_medoid(
 
         medoid_score = (
             squared_distance
-            .multiply(-1)
+            .multiply(
+                -1
+            )
             .rename(
                 "medoid_score"
             )
@@ -643,7 +634,7 @@ def build_hls_medoid(
         )
 
     scored_collection = (
-        safe_acquisitions
+        safe_daily_images
         .map(
             score_image
         )
@@ -668,7 +659,7 @@ def build_hls_medoid(
 def _safe_ratio(
     numerator,
     denominator,
-    band_name,
+    output_name,
     epsilon=1e-6,
 ):
     numerator = ee.Image(
@@ -679,111 +670,178 @@ def _safe_ratio(
         denominator
     )
 
-    valid_denominator = (
-        denominator
-        .abs()
-        .gt(
-            epsilon
-        )
-    )
-
     return (
         numerator
         .divide(
             denominator
         )
         .updateMask(
-            valid_denominator
+            denominator
+            .abs()
+            .gt(
+                epsilon
+            )
         )
         .rename(
-            band_name
+            output_name
         )
         .toFloat()
     )
 
 
 # ============================================================
-# HLS indices
+# HLS spectral indices + FVC + albedo
 # ============================================================
 
-def add_hls_indices(image):
-    image = ee.Image(image)
+def add_hls_indices(
+    image,
+):
+    image = ee.Image(
+        image
+    )
 
     blue = (
-        image
-        .select("Blue")
+        image.select(
+            "Blue"
+        )
     )
 
     green = (
-        image
-        .select("Green")
+        image.select(
+            "Green"
+        )
     )
 
     red = (
-        image
-        .select("Red")
+        image.select(
+            "Red"
+        )
     )
 
     nir = (
-        image
-        .select("NIR")
+        image.select(
+            "NIR"
+        )
     )
 
     swir1 = (
-        image
-        .select("SWIR1")
+        image.select(
+            "SWIR1"
+        )
     )
 
-    ndvi = _safe_ratio(
-        nir.subtract(red),
-        nir.add(red),
-        "NDVI",
+
+    # ========================================================
+    # NDVI
+    # ========================================================
+
+    ndvi = (
+        _safe_ratio(
+            nir.subtract(
+                red
+            ),
+            nir.add(
+                red
+            ),
+            "NDVI",
+        )
     )
 
-    evi = _safe_ratio(
-        nir
-        .subtract(red)
-        .multiply(2.5),
-        (
+
+    # ========================================================
+    # EVI
+    # ========================================================
+
+    evi = (
+        _safe_ratio(
+            nir
+            .subtract(
+                red
+            )
+            .multiply(
+                2.5
+            ),
             nir
             .add(
-                red.multiply(6.0)
+                red.multiply(
+                    6.0
+                )
             )
             .subtract(
-                blue.multiply(7.5)
+                blue.multiply(
+                    7.5
+                )
             )
-            .add(1.0)
-        ),
-        "EVI",
+            .add(
+                1.0
+            ),
+            "EVI",
+        )
     )
 
-    # Homogeneous SAVI definition used in this project
-    # for both HLS and Sentinel-2: L = 0.5.
-    savi = _safe_ratio(
-        nir
-        .subtract(red)
-        .multiply(1.5),
-        (
+
+    # ========================================================
+    # SAVI
+    # L = 0.5
+    # ========================================================
+
+    savi = (
+        _safe_ratio(
             nir
-            .add(red)
-            .add(0.5)
-        ),
-        "SAVI",
+            .subtract(
+                red
+            )
+            .multiply(
+                1.5
+            ),
+            nir
+            .add(
+                red
+            )
+            .add(
+                0.5
+            ),
+            "SAVI",
+        )
     )
 
-    ndwi = _safe_ratio(
-        green.subtract(nir),
-        green.add(nir),
-        "NDWI",
+
+    # ========================================================
+    # NDWI
+    # McFeeters: Green - NIR
+    # ========================================================
+
+    ndwi = (
+        _safe_ratio(
+            green.subtract(
+                nir
+            ),
+            green.add(
+                nir
+            ),
+            "NDWI",
+        )
     )
 
-    ndmi = _safe_ratio(
-        nir.subtract(swir1),
-        nir.add(swir1),
-        "NDMI",
+
+    # ========================================================
+    # NDMI
+    # ========================================================
+
+    ndmi = (
+        _safe_ratio(
+            nir.subtract(
+                swir1
+            ),
+            nir.add(
+                swir1
+            ),
+            "NDMI",
+        )
     )
 
-    return (
+
+    image_with_indices = (
         image
         .addBands(
             [
@@ -794,30 +852,29 @@ def add_hls_indices(image):
                 ndmi,
             ]
         )
-        .select(
-            HLS_PREDICTOR_BANDS
-        )
         .toFloat()
     )
 
 
-# ============================================================
-# HLS predictors
-# ============================================================
+    # ========================================================
+    # Fractional vegetation cover
+    # ========================================================
 
-def build_hls_predictors(
-    hls_period,
-    geometry,
-):
-    medoid = (
-        build_hls_medoid(
-            hls_period,
-            geometry,
+    image_with_fvc = (
+        add_fvc_band(
+            image_with_indices,
+            source="HLS",
         )
     )
 
+
+    # ========================================================
+    # Shortwave broadband surface albedo
+    # ========================================================
+
     return (
-        add_hls_indices(
-            medoid
+        add_hls_albedo(
+            image_with_fvc
         )
+        .toFloat()
     )
