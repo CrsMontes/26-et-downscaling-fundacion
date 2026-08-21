@@ -1,0 +1,36 @@
+{
+  "calibration_name": "fvc_global_ndvi_endmembers",
+  "method": "two_stage_global_percentile",
+  "coverage_threshold_pct": 80.0,
+  "water_exclusion": {
+    "index": "NDWI",
+    "rule": "exclude NDWI > 0"
+  },
+  "within_footprint_period": {
+    "low_candidate": "NDVI_p05",
+    "high_candidate": "NDVI_p95"
+  },
+  "across_all_valid_observations": {
+    "low_quantile": 0.05,
+    "high_quantile": 0.95,
+    "temporal_scheme": "global"
+  },
+  "calibration_period": {
+    "start": "2021-01-01",
+    "end": "2024-01-01"
+  },
+  "sources": {
+    "HLS": {
+      "ndvi_low_endmember": 0.4163919555733753,
+      "ndvi_high_endmember": 0.9083625164465531,
+      "n_observations": 434,
+      "n_stations": 5
+    },
+    "S2": {
+      "ndvi_low_endmember": 0.30906053079398427,
+      "ndvi_high_endmember": 0.9240448254540803,
+      "n_observations": 498,
+      "n_stations": 5
+    }
+  }
+}
