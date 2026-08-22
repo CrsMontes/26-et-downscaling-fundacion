@@ -18,6 +18,7 @@ STATION_FIELD = "Name"
 START_DATE = "2021-01-01"
 END_DATE = "2024-01-01"
 
+
 # ============================================================
 # MODIS MOD16A2GF
 # ============================================================
@@ -36,6 +37,11 @@ MODIS_STRICT_SCF_MAX = 1
 # True:
 # Also require the legacy strict ET_QC criteria.
 MODIS_REQUIRE_STRICT_QC = False
+
+
+# ============================================================
+# Analysis-period label
+# ============================================================
 
 def _build_period_label():
     start_date = date.fromisoformat(
@@ -56,7 +62,6 @@ def _build_period_label():
         - timedelta(days=1)
     )
 
-    # Use a compact label for complete calendar years.
     if (
         start_date.month == 1
         and start_date.day == 1
@@ -75,7 +80,6 @@ def _build_period_label():
             f"{last_year}"
         )
 
-    # Use exact dates for partial-year periods.
     return (
         f"{start_date:%Y%m%d}_"
         f"{last_included_date:%Y%m%d}"
@@ -91,8 +95,109 @@ OUTPUT_PERIOD_LABEL = (
 # Spatial analysis
 # ============================================================
 
+# Common projected CRS for footprint reductions in the
+# Fundación study area.
 ANALYSIS_CRS = "EPSG:32618"
+
+# Legacy default retained for backward compatibility only.
+# Production optical processing must use the source-specific
+# scale returned by get_optical_scale().
 ANALYSIS_SCALE = 20
+
+
+# ============================================================
+# Optical source
+# ============================================================
+
+DEFAULT_OPTICAL_SOURCE = "S2"
+
+SUPPORTED_OPTICAL_SOURCES = (
+    "S2",
+    "HLS",
+)
+
+OPTICAL_SOURCE_ALIASES = {
+    "S2": "S2",
+    "SENTINEL2": "S2",
+    "SENTINEL-2": "S2",
+    "HLS": "HLS",
+    "HLS_COMBINED": "HLS",
+}
+
+OPTICAL_OUTPUT_LABELS = {
+    "S2": "S2",
+    "HLS": "HLS_COMBINED",
+}
+
+OPTICAL_SCALES_M = {
+    "S2": 20,
+    "HLS": 30,
+}
+
+# Coverage is retained continuously in the exported master.
+# This threshold is used only by the legacy joint-validity flag;
+# it does not determine extraction eligibility.
+OPTICAL_FULL_COVERAGE = 0.999
+
+
+def normalize_optical_source(
+    source,
+):
+    normalized = (
+        str(source)
+        .strip()
+        .upper()
+    )
+
+    if normalized not in OPTICAL_SOURCE_ALIASES:
+        raise ValueError(
+            "Unsupported optical source: "
+            f"{source}. Expected one of: "
+            "S2, HLS, HLS_COMBINED."
+        )
+
+    return OPTICAL_SOURCE_ALIASES[
+        normalized
+    ]
+
+
+def get_optical_scale(
+    source,
+):
+    source = normalize_optical_source(
+        source
+    )
+
+    return OPTICAL_SCALES_M[
+        source
+    ]
+
+
+def get_optical_output_label(
+    source,
+):
+    source = normalize_optical_source(
+        source
+    )
+
+    return OPTICAL_OUTPUT_LABELS[
+        source
+    ]
+
+
+def build_training_output_filename(
+    source,
+):
+    source_label = (
+        get_optical_output_label(
+            source
+        )
+    )
+
+    return (
+        f"ET_{source_label}_S1_METEO_FOOTPRINT_"
+        f"{OUTPUT_PERIOD_LABEL}.csv"
+    )
 
 
 # ============================================================
@@ -101,7 +206,16 @@ ANALYSIS_SCALE = 20
 
 S2_QA_BAND = "cs_cdf"
 S2_CLEAR_THRESHOLD = 0.60
-S2_FULL_COVERAGE = 0.999
+
+# Retained for notebooks and backward compatibility.
+S2_FULL_COVERAGE = OPTICAL_FULL_COVERAGE
+
+
+# ============================================================
+# HLS
+# ============================================================
+
+HLS_FULL_COVERAGE = OPTICAL_FULL_COVERAGE
 
 
 # ============================================================
@@ -126,7 +240,10 @@ ERA5_SEARCH_RADIUS_M = 50000
 
 OUTPUT_DIRECTORY = "outputs"
 
+# Backward-compatible default. The production script builds the
+# filename dynamically from the selected optical source.
 OUTPUT_FILENAME = (
-    "ET_S2_S1_METEO_MULTISCALE_"
-    f"{OUTPUT_PERIOD_LABEL}.csv"
+    build_training_output_filename(
+        DEFAULT_OPTICAL_SOURCE
+    )
 )

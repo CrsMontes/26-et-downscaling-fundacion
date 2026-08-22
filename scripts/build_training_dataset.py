@@ -1,3 +1,4 @@
+import argparse
 import csv
 import shutil
 from datetime import date, timedelta
@@ -6,10 +7,14 @@ from pathlib import Path
 import ee
 
 from et_downscaling.config import (
+    DEFAULT_OPTICAL_SOURCE,
     END_DATE,
-    OUTPUT_FILENAME,
     OUTPUT_PERIOD_LABEL,
     START_DATE,
+    build_training_output_filename,
+    get_optical_output_label,
+    get_optical_scale,
+    normalize_optical_source,
 )
 
 from et_downscaling.dataset import (
@@ -31,13 +36,45 @@ from et_downscaling.modis import (
     build_modis_inputs,
 )
 
+from et_downscaling.optical import (
+    get_optical_collection,
+)
+
 from et_downscaling.sentinel1 import (
     get_sentinel1_collection,
 )
 
-from et_downscaling.sentinel2 import (
-    get_sentinel2_collection,
-)
+
+# ============================================================
+# Command-line arguments
+# ============================================================
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Build the MODIS-footprint ET training master "
+            "using Sentinel-2 or combined HLS optical data."
+        )
+    )
+
+    parser.add_argument(
+        "--optical-source",
+        default=(
+            DEFAULT_OPTICAL_SOURCE
+        ),
+        choices=[
+            "S2",
+            "HLS",
+            "HLS_COMBINED",
+        ],
+        help=(
+            "Optical source. S2 is the current default. "
+            "HLS and HLS_COMBINED both select combined "
+            "HLS S30 + L30 processing."
+        ),
+    )
+
+    return parser.parse_args()
 
 
 # ============================================================
@@ -68,8 +105,6 @@ def initialize_earth_engine():
                 project=project_id
             )
 
-            # Perform a lightweight request to verify
-            # that Earth Engine can use the project.
             ee.Number(1).getInfo()
 
         except Exception as error:
@@ -255,7 +290,7 @@ def merge_csv_chunks(
 
     total_rows = 0
     footprint_rows = 0
-    local_rows = 0
+    unexpected_scale_rows = 0
 
     with output_path.open(
         "w",
@@ -297,16 +332,26 @@ def merge_csv_chunks(
 
                     total_rows += 1
 
-                    if row["scale"] == "footprint":
+                    if (
+                        row.get(
+                            "scale"
+                        )
+                        == "footprint"
+                    ):
                         footprint_rows += 1
 
-                    elif row["scale"] == "local_60m":
-                        local_rows += 1
+                    else:
+                        unexpected_scale_rows += 1
 
     return {
-        "total": total_rows,
-        "footprint": footprint_rows,
-        "local_60m": local_rows,
+        "total":
+            total_rows,
+
+        "footprint":
+            footprint_rows,
+
+        "unexpected_scale":
+            unexpected_scale_rows,
     }
 
 
@@ -315,6 +360,26 @@ def merge_csv_chunks(
 # ============================================================
 
 def main():
+    args = parse_arguments()
+
+    optical_source = (
+        normalize_optical_source(
+            args.optical_source
+        )
+    )
+
+    optical_label = (
+        get_optical_output_label(
+            optical_source
+        )
+    )
+
+    optical_scale = (
+        get_optical_scale(
+            optical_source
+        )
+    )
+
     initialize_earth_engine()
 
     print()
@@ -332,6 +397,17 @@ def main():
     print(
         "Output period label:",
         OUTPUT_PERIOD_LABEL,
+    )
+
+    print(
+        "Optical source:",
+        optical_label,
+    )
+
+    print(
+        "Optical working scale:",
+        optical_scale,
+        "m",
     )
 
     print()
@@ -353,9 +429,10 @@ def main():
         ]
     )
 
-    s2_collection = (
-        get_sentinel2_collection(
-            station_footprints
+    optical_collection = (
+        get_optical_collection(
+            station_footprints,
+            optical_source,
         )
     )
 
@@ -386,22 +463,26 @@ def main():
 
     availability_table = (
         build_availability_table(
-            modis_inputs,
-            s2_collection,
-            s1_collection,
+            modis_inputs=(
+                modis_inputs
+            ),
+            optical_collection=(
+                optical_collection
+            ),
+            s1_collection=(
+                s1_collection
+            ),
+            optical_source=(
+                optical_source
+            ),
         )
     )
 
     # ========================================================
-    # Select observations for predictor extraction
+    # Select neutral extraction observations
     #
-    # Coverage thresholds for Sentinel-2 and Sentinel-1 are
-    # deliberately not applied here. Spatial coverage is
-    # preserved as continuous quality-control information.
-    #
-    # Extraction currently requires:
-    # - observation inside the analysis period;
-    # - valid MODIS ET target.
+    # Optical and Sentinel-1 coverage thresholds are not hard
+    # filters here. Coverage remains explicit QA information.
     # ========================================================
 
     extraction_observations = (
@@ -453,13 +534,15 @@ def main():
         .parents[1]
     )
 
-    output_directory = (
+    source_output_directory = (
         project_root
         / "outputs"
+        / "training"
+        / optical_label
     )
 
     chunk_directory = (
-        output_directory
+        source_output_directory
         / "_chunks"
         / OUTPUT_PERIOD_LABEL
     )
@@ -485,41 +568,6 @@ def main():
 
         for year in years:
 
-            annual_filename = (
-                f"station_"
-                f"{station_index:02d}_"
-                f"{year}.csv"
-            )
-
-            annual_path = (
-                chunk_directory
-                / annual_filename
-            )
-
-            # =================================================
-            # Reuse completed annual partition
-            # =================================================
-
-            if annual_path.exists():
-                print()
-                print(
-                    "Using existing annual partition:"
-                )
-
-                print(
-                    annual_filename
-                )
-
-                chunk_paths.append(
-                    annual_path
-                )
-
-                continue
-
-            # =================================================
-            # Process missing annual partition by quarter
-            # =================================================
-
             quarter_ranges = (
                 get_quarter_ranges(
                     year
@@ -528,25 +576,6 @@ def main():
 
             if not quarter_ranges:
                 continue
-
-            print()
-            print(
-                "Annual partition not available."
-            )
-
-            print(
-                "Station:",
-                station_index,
-            )
-
-            print(
-                "Year:",
-                year,
-            )
-
-            print(
-                "Processing by quarter..."
-            )
 
             for (
                 quarter_name,
@@ -566,10 +595,6 @@ def main():
                     / quarter_filename
                 )
 
-                # =============================================
-                # Reuse completed quarterly partition
-                # =============================================
-
                 if quarter_path.exists():
                     print()
                     print(
@@ -577,7 +602,7 @@ def main():
                     )
 
                     print(
-                        quarter_filename
+                        quarter_path
                     )
 
                     chunk_paths.append(
@@ -589,6 +614,11 @@ def main():
                 print()
                 print(
                     "Processing partition:"
+                )
+
+                print(
+                    "Optical source:",
+                    optical_label,
                 )
 
                 print(
@@ -628,16 +658,23 @@ def main():
                     )
                 )
 
-                # =============================================
-                # Heavy processing happens only for this subset
-                # =============================================
-
                 observations_with_stats = (
                     build_observations_with_stats(
-                        partition,
-                        s2_collection,
-                        s1_collection,
-                        meteorology_inputs,
+                        valid_observations=(
+                            partition
+                        ),
+                        optical_collection=(
+                            optical_collection
+                        ),
+                        s1_collection=(
+                            s1_collection
+                        ),
+                        meteorology_inputs=(
+                            meteorology_inputs
+                        ),
+                        optical_source=(
+                            optical_source
+                        ),
                     )
                 )
 
@@ -651,18 +688,19 @@ def main():
                     "Requesting local CSV..."
                 )
 
-                # Export the complete master table.
-                #
-                # Rows with incomplete predictors are retained
-                # and identified through the QC and missingness
-                # fields instead of being discarded here.
+                relative_chunk_path = (
+                    Path("training")
+                    / optical_label
+                    / "_chunks"
+                    / OUTPUT_PERIOD_LABEL
+                    / quarter_filename
+                )
+
                 downloaded_path = (
                     export_training_dataset(
                         output["all"],
                         output_filename=(
-                            f"_chunks/"
-                            f"{OUTPUT_PERIOD_LABEL}/"
-                            f"{quarter_filename}"
+                            relative_chunk_path.as_posix()
                         ),
                     )
                 )
@@ -695,8 +733,10 @@ def main():
     )
 
     final_output_path = (
-        output_directory
-        / OUTPUT_FILENAME
+        source_output_directory
+        / build_training_output_filename(
+            optical_source
+        )
     )
 
     summary = (
@@ -726,8 +766,8 @@ def main():
     )
 
     print(
-        "Local 60 m rows:",
-        summary["local_60m"],
+        "Unexpected scale rows:",
+        summary["unexpected_scale"],
     )
 
     if summary["total"] == 0:
@@ -735,36 +775,29 @@ def main():
             "Master dataset is empty."
         )
 
-    if (
-        summary["total"]
-        != (
-            summary["footprint"]
-            + summary["local_60m"]
-        )
-    ):
+    if summary["unexpected_scale"] != 0:
         raise RuntimeError(
             "Master dataset contains rows "
-            "with unexpected scale values."
+            "with unexpected spatial support."
         )
 
     if (
-        summary["footprint"]
-        != summary["local_60m"]
+        summary["total"]
+        != summary["footprint"]
     ):
         raise RuntimeError(
-            "Footprint and local 60 m row "
-            "counts do not match."
+            "Master dataset must contain only "
+            "MODIS-footprint training rows."
         )
 
     # ========================================================
-    # Remove temporary chunks for this analysis period
+    # Remove temporary chunks for this source and period
     # ========================================================
 
     shutil.rmtree(
         chunk_directory
     )
 
-    # Remove the parent _chunks directory if empty.
     chunks_parent = (
         chunk_directory.parent
     )
@@ -780,6 +813,11 @@ def main():
     print()
     print(
         "Master dataset completed successfully."
+    )
+
+    print(
+        "Optical source:",
+        optical_label,
     )
 
     print(

@@ -80,9 +80,14 @@ HLS_POSITIVE_BANDS = [
 
 # All harmonized reflectance bands participate in the medoid
 # distance.
-HLS_MEDOID_SCORE_BANDS = (
-    HLS_REFLECTANCE_BANDS.copy()
-)
+HLS_MEDOID_SCORE_BANDS = [
+    "Blue",
+    "Green",
+    "Red",
+    "NIR",
+    "SWIR1",
+    "SWIR2",
+]
 
 
 # ============================================================
@@ -137,6 +142,125 @@ def _set_hls_metadata(
 
 
 # ============================================================
+# Standardize HLS MGRS identifier
+# ============================================================
+
+def _add_hls_mgrs_tile(
+    image,
+):
+    """
+    Parse the MGRS tile from the HLS system:index.
+
+    Examples
+    --------
+    1_T18PWS_20210103T152641 -> 18PWS
+    2_T18PWS_20210111T151708 -> 18PWS
+    """
+    image = ee.Image(
+        image
+    )
+
+    system_index = ee.String(
+        image.get(
+            "system:index"
+        )
+    )
+
+    tile_token = ee.String(
+        system_index
+        .split("_")
+        .get(1)
+    )
+
+    mgrs_tile = (
+        tile_token
+        .slice(1)
+    )
+
+    return (
+        image.set(
+            "hls_mgrs_tile",
+            mgrs_tile,
+        )
+    )
+
+
+# ============================================================
+# Local HLS MGRS support
+# ============================================================
+
+def get_local_hls_mgrs_tiles(
+    geometry,
+):
+    """
+    Identify the MGRS tiles intersecting one local footprint.
+
+    Sentinel-2 MGRS metadata is used as an independent spatial
+    reference because the diagnostic reproduction showed that
+    HLS filterBounds() alone could admit non-local HLS assets.
+    """
+    geometry = ee.Geometry(
+        geometry
+    )
+
+    local_s2 = (
+        ee.ImageCollection(
+            "COPERNICUS/S2_SR_HARMONIZED"
+        )
+        .filterBounds(
+            geometry
+        )
+        .filterDate(
+            START_DATE,
+            END_DATE,
+        )
+    )
+
+    return (
+        ee.List(
+            local_s2.aggregate_array(
+                "MGRS_TILE"
+            )
+        )
+        .distinct()
+        .sort()
+    )
+
+
+def filter_hls_collection_to_geometry(
+    collection,
+    geometry,
+):
+    """
+    Restrict HLS to the verified local MGRS tile set and geometry.
+    """
+    geometry = ee.Geometry(
+        geometry
+    )
+
+    local_tiles = (
+        get_local_hls_mgrs_tiles(
+            geometry
+        )
+    )
+
+    return (
+        ee.ImageCollection(
+            collection
+        )
+        .filter(
+            ee.Filter.inList(
+                "hls_mgrs_tile",
+                local_tiles,
+            )
+        )
+        .filterBounds(
+            geometry
+        )
+    )
+
+
+# ============================================================
 # HLS collection
 # ============================================================
 
@@ -168,6 +292,9 @@ def get_hls_collection(
                     "S30",
                 )
         )
+        .map(
+            _add_hls_mgrs_tile
+        )
     )
 
     l30_collection = (
@@ -188,6 +315,9 @@ def get_hls_collection(
                     "L30",
                 )
         )
+        .map(
+            _add_hls_mgrs_tile
+        )
     )
 
     return (
@@ -207,6 +337,7 @@ def get_hls_collection(
 
 def _build_hls_fmask_clear_mask(
     image,
+    exclude_high_aerosol=False,
 ):
     image = ee.Image(
         image
@@ -255,7 +386,7 @@ def _build_hls_fmask_clear_mask(
         .eq(0)
     )
 
-    return (
+    clear_mask = (
         no_cloud
         .And(
             no_adjacent
@@ -266,6 +397,24 @@ def _build_hls_fmask_clear_mask(
         .And(
             no_snow
         )
+    )
+
+    if exclude_high_aerosol:
+        aerosol_level = (
+            fmask
+            .rightShift(6)
+            .bitwiseAnd(3)
+        )
+
+        clear_mask = (
+            clear_mask
+            .And(
+                aerosol_level.neq(3)
+            )
+        )
+
+    return (
+        clear_mask
         .rename(
             "hls_clear"
         )
@@ -279,6 +428,7 @@ def _build_hls_fmask_clear_mask(
 def _prepare_hls_image(
     image,
     source_bands,
+    exclude_high_aerosol=False,
 ):
     image = ee.Image(
         image
@@ -319,7 +469,10 @@ def _prepare_hls_image(
 
     clear_mask = (
         _build_hls_fmask_clear_mask(
-            image
+            image,
+            exclude_high_aerosol=(
+                exclude_high_aerosol
+            ),
         )
     )
 
@@ -352,6 +505,7 @@ def _prepare_hls_image(
                 "sensor",
                 "hls_sensor",
                 "date_key",
+                "hls_mgrs_tile",
             ],
         )
     )
@@ -373,6 +527,7 @@ def prepare_hls_s30(
         _prepare_hls_image(
             image,
             HLS_S30_SOURCE_BANDS,
+            exclude_high_aerosol=True,
         )
     )
 
@@ -388,6 +543,7 @@ def prepare_hls_l30(
         _prepare_hls_image(
             image,
             HLS_L30_SOURCE_BANDS,
+            exclude_high_aerosol=False,
         )
     )
 
