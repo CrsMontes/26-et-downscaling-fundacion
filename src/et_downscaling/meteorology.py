@@ -43,7 +43,12 @@ def get_era5_land_collection():
         )
         .filterDate(
             START_DATE,
-            END_DATE,
+            ee.Date(
+                END_DATE
+            ).advance(
+                1,
+                "day",
+            ),
         )
         .select(
             ERA5_SOURCE_BANDS
@@ -209,6 +214,8 @@ def prepare_era5_hourly(
         )
     )
 
+    # ERA5-Land wind components are provided at 10 m.
+    # Wind_mean_ms therefore represents 10 m wind speed.
     wind = (
         u_wind
         .pow(
@@ -777,6 +784,7 @@ def get_meteorological_properties(
         )
     )
 
+    # Mean hourly air temperature during the MODIS period.
     tair_mean = (
         era5_period
         .select(
@@ -788,6 +796,21 @@ def get_meteorological_properties(
         )
     )
 
+    # Minimum hourly air temperature observed during the
+    # complete MODIS period.
+    tair_min = (
+        era5_period
+        .select(
+            "Tair_C"
+        )
+        .min()
+        .rename(
+            "Tair_min_C"
+        )
+    )
+
+    # Maximum hourly air temperature observed during the
+    # complete MODIS period.
     tair_max = (
         era5_period
         .select(
@@ -832,6 +855,8 @@ def get_meteorological_properties(
         )
     )
 
+    # Hourly accumulated shortwave energy is summed over the
+    # MODIS period and normalized by the actual number of days.
     solar_daily = (
         era5_period
         .select(
@@ -848,6 +873,9 @@ def get_meteorological_properties(
 
     era5_summary = (
         tair_mean
+        .addBands(
+            tair_min
+        )
         .addBands(
             tair_max
         )

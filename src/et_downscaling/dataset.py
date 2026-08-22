@@ -176,7 +176,7 @@ def build_availability_table(
                     geometry=station_point,
                     crs=modis_projection,
                     scale=modis_scale,
-                    maxPixels=10,
+                    maxPixels=100,
                 )
             )
 

@@ -67,8 +67,7 @@ HLS_L30_SOURCE_BANDS = [
 
 
 # Coastal is deliberately excluded from the positivity test.
-# It is retained as a predictor, but small negative Coastal
-# reflectances can be valid in HLS.
+# Small negative Coastal reflectances can be valid in HLS.
 HLS_POSITIVE_BANDS = [
     "Blue",
     "Green",
@@ -79,7 +78,8 @@ HLS_POSITIVE_BANDS = [
 ]
 
 
-# All seven harmonized bands participate in the HLS medoid.
+# All harmonized reflectance bands participate in the medoid
+# distance.
 HLS_MEDOID_SCORE_BANDS = (
     HLS_REFLECTANCE_BANDS.copy()
 )
@@ -89,15 +89,15 @@ HLS_MEDOID_SCORE_BANDS = (
 # HLS Fmask configuration
 # ============================================================
 
-# HLS Fmask bits used for masking:
+# HLS Fmask:
 #
 # Bit 1: cloud
 # Bit 2: adjacent to cloud/shadow
 # Bit 3: cloud shadow
 # Bit 4: snow/ice
 #
-# Bit 5 (water) is deliberately retained.
-# Bits 6-7 (aerosol level) are not used as hard filters.
+# Bit 5: water -> retained
+# Bits 6-7: aerosol -> not used as hard filters
 
 HLS_FMASK_CLOUD_BIT = 1
 HLS_FMASK_ADJACENT_BIT = 2
@@ -106,7 +106,7 @@ HLS_FMASK_SNOW_BIT = 4
 
 
 # ============================================================
-# Add HLS source metadata
+# Add HLS metadata
 # ============================================================
 
 def _set_hls_metadata(
@@ -117,7 +117,7 @@ def _set_hls_metadata(
         image
     )
 
-    return (
+    return ee.Image(
         image
         .set(
             "sensor",
@@ -302,9 +302,10 @@ def _prepare_hls_image(
         )
     )
 
-    # Physically problematic non-positive reflectances are
-    # removed only from bands required by the derived indices.
-    # Coastal is deliberately not included in this test.
+    # Require positive reflectance only in bands used by the
+    # vegetation/water indices and albedo.
+    #
+    # Coastal is deliberately excluded.
     positive_reflectance = (
         reflectance
         .select(
@@ -332,12 +333,18 @@ def _prepare_hls_image(
         )
     )
 
-    return (
+    prepared = (
         reflectance
         .updateMask(
             valid_mask
         )
-        .copyProperties(
+    )
+
+    # copyProperties returns a generic Earth Engine Element.
+    # Explicitly cast it back to ee.Image before using image
+    # methods such as toFloat().
+    prepared = ee.Image(
+        prepared.copyProperties(
             image,
             [
                 "system:time_start",
@@ -347,6 +354,10 @@ def _prepare_hls_image(
                 "date_key",
             ],
         )
+    )
+
+    return (
+        prepared
         .toFloat()
     )
 
@@ -490,9 +501,10 @@ def _build_hls_sensor_daily_collection(
             )
         )
 
-        return (
-            daily_mosaic
-            .set(
+        # set() also returns a generic EE object.
+        # Explicitly cast the result back to ee.Image.
+        return ee.Image(
+            daily_mosaic.set(
                 {
                     "date_key":
                         date_key,
@@ -546,8 +558,8 @@ def build_hls_daily_collection(
         )
     )
 
-    # S30 and L30 remain separate acquisition-level daily
-    # mosaics. They jointly compete in the temporal medoid.
+    # S30 and L30 remain separate daily observations.
+    # Both compete jointly in the temporal medoid.
     return (
         s30_daily
         .merge(
@@ -574,8 +586,8 @@ def build_hls_medoid(
         )
     )
 
-    # Fully masked fallback guarantees a stable output band
-    # structure for periods without valid HLS observations.
+    # A fully masked fallback guarantees a stable output band
+    # structure when a period contains no valid observations.
     safe_daily_images = (
         daily_images
         .merge(
@@ -878,3 +890,4 @@ def add_hls_indices(
         )
         .toFloat()
     )
+    
