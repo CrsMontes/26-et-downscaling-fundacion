@@ -6,4 +6,9 @@ channels:
 dependencies:
   - python=3.12
   - earthengine-api=1.7.38
+  - numpy
+  - pandas
+  - scikit-learn
+  - matplotlib
+  - ipykernel
   - pip

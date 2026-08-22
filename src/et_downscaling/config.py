@@ -134,10 +134,11 @@ OPTICAL_SCALES_M = {
     "HLS": 30,
 }
 
-# Coverage is retained continuously in the exported master.
-# This threshold is used only by the legacy joint-validity flag;
-# it does not determine extraction eligibility.
+# Coverage is retained continuously in the raw satellite master.
+# These thresholds are evaluated locally; they do not determine
+# Earth Engine extraction eligibility.
 OPTICAL_FULL_COVERAGE = 0.999
+OPTICAL_QA_THRESHOLDS_PCT = (80.0, 90.0, 99.0)
 
 
 def normalize_optical_source(
@@ -185,6 +186,21 @@ def get_optical_output_label(
     ]
 
 
+def build_satellite_output_filename(
+    source,
+):
+    source_label = (
+        get_optical_output_label(
+            source
+        )
+    )
+
+    return (
+        f"ET_{source_label}_S1_SATELLITE_FOOTPRINT_"
+        f"{OUTPUT_PERIOD_LABEL}.csv"
+    )
+
+
 def build_training_output_filename(
     source,
 ):
@@ -195,7 +211,7 @@ def build_training_output_filename(
     )
 
     return (
-        f"ET_{source_label}_S1_METEO_FOOTPRINT_"
+        f"ET_{source_label}_S1_METEO_KC_FOOTPRINT_"
         f"{OUTPUT_PERIOD_LABEL}.csv"
     )
 

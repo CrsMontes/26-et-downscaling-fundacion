@@ -12,9 +12,6 @@ from .config import (
     normalize_optical_source,
 )
 
-from .meteorology import (
-    get_meteorological_properties,
-)
 
 from .schema import (
     BASE_PROPERTY_NAMES,
@@ -706,7 +703,6 @@ def calculate_observation(
     observation,
     optical_collection,
     s1_collection,
-    meteorology_inputs,
     optical_source,
 ):
     optical_source = (
@@ -740,45 +736,6 @@ def calculate_observation(
     period_end = (
         get_modis_period_end(
             period_start
-        )
-    )
-
-    number_days = (
-        ee.Number(
-            observation.get(
-                "number_days"
-            )
-        )
-    )
-
-    station_point = (
-        ee.Geometry.Point(
-            [
-                observation.get(
-                    "longitude"
-                ),
-                observation.get(
-                    "latitude"
-                ),
-            ]
-        )
-    )
-
-    # ========================================================
-    # Meteorology
-    #
-    # This remains in the legacy GEE extraction path for now.
-    # A subsequent refactor moves temporal aggregation and
-    # reference-ET construction to the local pipeline.
-    # ========================================================
-
-    meteorology = (
-        get_meteorological_properties(
-            period_start,
-            period_end,
-            number_days,
-            station_point,
-            meteorology_inputs,
         )
     )
 
@@ -952,9 +909,6 @@ def calculate_observation(
         ee.Feature(
             observation
             .set(
-                meteorology
-            )
-            .set(
                 {
                     "footprint_stats":
                         footprint_stats,
@@ -981,7 +935,6 @@ def build_observations_with_stats(
     valid_observations,
     optical_collection,
     s1_collection,
-    meteorology_inputs,
     optical_source,
 ):
     def process_observation(
@@ -997,9 +950,6 @@ def build_observations_with_stats(
                 ),
                 s1_collection=(
                     s1_collection
-                ),
-                meteorology_inputs=(
-                    meteorology_inputs
                 ),
                 optical_source=(
                     optical_source
@@ -1063,36 +1013,12 @@ def build_output_row(
         )
     )
 
-    meteo_missing_count = (
-        ee.Number(
-            observation.get(
-                "meteo_missing_count"
-            )
-        )
-    )
-
-    meteo_complete = (
-        ee.Number(
-            observation.get(
-                "meteo_complete"
-            )
-        )
-    )
-
-    total_missing_count = (
-        missing_count.add(
-            meteo_missing_count
-        )
-    )
+    total_missing_count = missing_count
 
     stats_complete = (
         ee.Number(
             ee.Algorithms.If(
-                missing_count
-                .eq(0)
-                .And(
-                    meteo_complete.eq(1)
-                ),
+                missing_count.eq(0),
                 1,
                 0,
             )

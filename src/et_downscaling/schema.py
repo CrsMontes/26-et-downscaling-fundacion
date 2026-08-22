@@ -135,10 +135,10 @@ QA_STAT_COLUMNS = [
 
 
 # ============================================================
-# Export columns
+# Satellite export columns
 # ============================================================
 
-BASE_EXPORT_COLUMNS = [
+SATELLITE_BASE_EXPORT_COLUMNS = [
     "station",
     "station_id",
     "longitude",
@@ -151,16 +151,11 @@ BASE_EXPORT_COLUMNS = [
     "period_end",
     "number_days",
 
-    # --------------------------------------------------------
-    # MODIS ET
-    # --------------------------------------------------------
-
+    # MODIS target and QC
     "ET_mm_period",
     "ET_mm_day",
-
     "modis_value_valid",
     "modis_good",
-
     "ET_QC",
     "modis_qc_present",
     "modis_qc_good",
@@ -170,10 +165,7 @@ BASE_EXPORT_COLUMNS = [
     "modis_cloud_state",
     "modis_scf_qc",
 
-    # --------------------------------------------------------
-    # Optical source and availability
-    # --------------------------------------------------------
-
+    # Optical availability
     "optical_source",
     "optical_scale_m",
     "optical_dates_total",
@@ -182,76 +174,21 @@ BASE_EXPORT_COLUMNS = [
     "optical_union_coverage_pct",
     "optical_valid",
 
-    # --------------------------------------------------------
-    # Sentinel-1 availability
-    # --------------------------------------------------------
-
+    # Sentinel-1 availability and geometry
     "s1_dates_total",
     "s1_dates",
     "s1_products_total",
     "s1_union_coverage_pct",
-
+    "s1_valid",
     "s1_pass",
     "s1_relative_orbit",
 
-    # --------------------------------------------------------
-    # Meteorology
-    # --------------------------------------------------------
-
-    "Tair_mean_C",
-    "Tair_max_C",
-    "VPD_mean_kPa",
-    "VPD_max_kPa",
-    "SolarRad_MJ_m2_day",
-    "Wind_mean_ms",
-    "Precip_period_mm",
-    "Precip_prev30d_mm",
-
-    # --------------------------------------------------------
-    # Meteorological temporal integrity
-    # --------------------------------------------------------
-
-    "era5_hours_total",
-    "era5_hours_expected",
-
-    "chirps_days_period",
-    "chirps_days_expected",
-
-    "chirps_days_prev30",
-    "chirps_days_prev30_expected",
-
-    # --------------------------------------------------------
-    # Meteorological spatial support
-    # --------------------------------------------------------
-
-    "era5_support_m",
-    "chirps_support_m",
-
-    "era5_sampling_method",
-    "era5_sampling_longitude",
-    "era5_sampling_latitude",
-    "era5_sampling_distance_m",
-
-    # --------------------------------------------------------
-    # Meteorological completeness
-    # --------------------------------------------------------
-
-    "meteo_missing_count",
-    "meteo_temporal_complete",
-    "meteo_complete",
-
-    # --------------------------------------------------------
     # Spatial support
-    # --------------------------------------------------------
-
     "scale",
     "predictor_support",
     "target_support",
 
-    # --------------------------------------------------------
-    # Predictor completeness
-    # --------------------------------------------------------
-
+    # Satellite predictor completeness
     "missing_stats_count",
     "stats_complete",
 
@@ -259,19 +196,18 @@ BASE_EXPORT_COLUMNS = [
 ]
 
 
-# ============================================================
-# Final export selectors
-# ============================================================
-
-EXPORT_SELECTORS = (
-    BASE_EXPORT_COLUMNS
+SATELLITE_EXPORT_SELECTORS = (
+    SATELLITE_BASE_EXPORT_COLUMNS
     + STAT_COLUMNS
     + QA_STAT_COLUMNS
 )
 
+# Backward-compatible alias for the Earth Engine satellite export.
+EXPORT_SELECTORS = SATELLITE_EXPORT_SELECTORS
+
 
 # ============================================================
-# Base observation properties
+# Base observation properties used inside Earth Engine
 # ============================================================
 
 BASE_PROPERTY_NAMES = [
@@ -289,10 +225,8 @@ BASE_PROPERTY_NAMES = [
 
     "ET_mm_period",
     "ET_mm_day",
-
     "modis_value_valid",
     "modis_good",
-
     "ET_QC",
     "modis_qc_present",
     "modis_qc_good",
@@ -314,38 +248,8 @@ BASE_PROPERTY_NAMES = [
     "s1_dates",
     "s1_products_total",
     "s1_union_coverage_pct",
-
-    "Tair_mean_C",
-    "Tair_max_C",
-    "VPD_mean_kPa",
-    "VPD_max_kPa",
-    "SolarRad_MJ_m2_day",
-    "Wind_mean_ms",
-    "Precip_period_mm",
-    "Precip_prev30d_mm",
-
-    "era5_hours_total",
-    "era5_hours_expected",
-
-    "chirps_days_period",
-    "chirps_days_expected",
-
-    "chirps_days_prev30",
-    "chirps_days_prev30_expected",
-
-    "era5_support_m",
-    "chirps_support_m",
-
-    "era5_sampling_method",
-    "era5_sampling_longitude",
-    "era5_sampling_latitude",
-    "era5_sampling_distance_m",
-
-    "meteo_missing_count",
-    "meteo_temporal_complete",
-    "meteo_complete",
+    "s1_valid",
 
     "target_support",
-
     "system:time_start",
 ]
