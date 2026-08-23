@@ -106,8 +106,17 @@ def prepare_hourly_era5(table: pd.DataFrame) -> pd.DataFrame:
     result["Wind_ms"] = np.sqrt(
         result["u_wind_10m_ms"] ** 2 + result["v_wind_10m_ms"] ** 2
     )
+    # Preserve the original ERA5-Land values in the raw export,
+    # but enforce the physical lower bound for downward solar
+    # radiation during local processing. Direct GEE re-querying
+    # confirmed that the few negative values originate in the
+    # source hourly band and their effect on ETo/ETr is negligible.
     result["SolarRad_MJ_m2_hour"] = (
-        result["surface_solar_radiation_downwards_hourly_J_m2"] * 1e-6
+        result[
+            "surface_solar_radiation_downwards_hourly_J_m2"
+        ]
+        .clip(lower=0.0)
+        * 1e-6
     )
     result["ea_kPa"] = saturation_vapor_pressure_kpa(result["Tdew_C"])
     result["VPD_kPa"] = np.maximum(
