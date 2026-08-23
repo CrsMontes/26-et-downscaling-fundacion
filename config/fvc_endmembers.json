@@ -28,9 +28,9 @@
   },
   "sources": {
     "HLS": {
-      "ndvi_low_endmember": 0.4163919518084051,
-      "ndvi_high_endmember": 0.9083625163105443,
-      "n_observations": 434,
+      "ndvi_low_endmember": 0.411908487478892,
+      "ndvi_high_endmember": 0.9082510914569858,
+      "n_observations": 381,
       "n_stations": 5
     },
     "S2": {
