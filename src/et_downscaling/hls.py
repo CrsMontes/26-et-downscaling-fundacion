@@ -175,7 +175,7 @@ def _add_hls_mgrs_tile(
     tile_token = ee.String(
         system_index
         .split("_")
-        .get(1)
+        .get(0)
     )
 
     mgrs_tile = (
