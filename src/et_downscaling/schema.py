@@ -1,3 +1,6 @@
+from .config import normalize_optical_source
+
+
 # ============================================================
 # Meteorological variables
 # ============================================================
@@ -21,9 +24,6 @@ EXPECTED_METEOROLOGICAL_KEYS = (
 
 # ============================================================
 # Sentinel-2 source bands
-#
-# Retained because sentinel2.py uses these names conceptually
-# and diagnostic notebooks may import them.
 # ============================================================
 
 S2_SOURCE_BANDS = [
@@ -55,7 +55,8 @@ S2_BAND_NAMES = [
 
 
 # ============================================================
-# Source-neutral optical model bands
+# Optical features that are directly comparable between S2
+# and combined HLS S30 + L30
 # ============================================================
 
 COMMON_OPTICAL_REFLECTANCE_BANDS = [
@@ -77,10 +78,49 @@ COMMON_OPTICAL_INDEX_BANDS = [
 ]
 
 
-COMMON_OPTICAL_PREDICTOR_BANDS = (
+COMMON_OPTICAL_MODEL_BANDS = (
     COMMON_OPTICAL_REFLECTANCE_BANDS
     + COMMON_OPTICAL_INDEX_BANDS
 )
+
+
+# ============================================================
+# Source-specific optical extraction features
+#
+# Extraction is intentionally richer than the common matched
+# model feature set. These variables are retained so their
+# value can be tested locally without another Earth Engine run.
+#
+# They are NOT automatically model predictors.
+# ============================================================
+
+S2_SOURCE_SPECIFIC_EXTRACTION_BANDS = [
+    "RedEdge1",
+    "RedEdge2",
+    "RedEdge3",
+    "NIR_Broad",
+    "NDRE",
+    "Albedo",
+    "FVC",
+]
+
+
+HLS_SOURCE_SPECIFIC_EXTRACTION_BANDS = [
+    "Albedo",
+    "FVC",
+]
+
+
+SOURCE_OPTICAL_EXTRACTION_BANDS = {
+    "S2": (
+        COMMON_OPTICAL_MODEL_BANDS
+        + S2_SOURCE_SPECIFIC_EXTRACTION_BANDS
+    ),
+    "HLS": (
+        COMMON_OPTICAL_MODEL_BANDS
+        + HLS_SOURCE_SPECIFIC_EXTRACTION_BANDS
+    ),
+}
 
 
 # ============================================================
@@ -93,45 +133,144 @@ S1_MODEL_BANDS = [
     "VV_minus_VH_dB",
 ]
 
-# Incidence angle is retained for QA/geometry diagnostics but is
-# deliberately excluded from the transferable model predictor set.
+
 S1_QA_BANDS = [
     "Angle_deg",
 ]
 
 
 # ============================================================
-# Raster predictor bands used for the training table
+# Model candidate sets
+#
+# COMMON_* is the matched S2/HLS set used for controlled source
+# comparisons.
+#
+# SOURCE_* adds source-specific variables that may be evaluated
+# later. Presence in these lists does not mean final inclusion.
 # ============================================================
 
-PREDICTOR_BANDS = (
-    COMMON_OPTICAL_PREDICTOR_BANDS
+COMMON_SATELLITE_MODEL_BANDS = (
+    COMMON_OPTICAL_MODEL_BANDS
     + S1_MODEL_BANDS
 )
 
 
+SOURCE_SATELLITE_MODEL_CANDIDATE_BANDS = {
+    "S2": (
+        COMMON_OPTICAL_MODEL_BANDS
+        + S2_SOURCE_SPECIFIC_EXTRACTION_BANDS
+        + S1_MODEL_BANDS
+    ),
+    "HLS": (
+        COMMON_OPTICAL_MODEL_BANDS
+        + HLS_SOURCE_SPECIFIC_EXTRACTION_BANDS
+        + S1_MODEL_BANDS
+    ),
+}
+
+
 # ============================================================
-# Scale-transferable footprint statistics
-#
-# Only means are exported. Within-footprint standard deviation,
-# percentiles, and other heterogeneity statistics are excluded
-# because they do not have an equivalent meaning for a single
-# fine-grid prediction cell.
+# Source-specific extraction helpers
 # ============================================================
 
-STAT_COLUMNS = [
-    f"{band_name}_mean"
-    for band_name in PREDICTOR_BANDS
-]
+def get_optical_extraction_bands(
+    source,
+):
+    source = normalize_optical_source(
+        source
+    )
 
-EXPECTED_STAT_KEYS = (
-    STAT_COLUMNS.copy()
+    return list(
+        SOURCE_OPTICAL_EXTRACTION_BANDS[
+            source
+        ]
+    )
+
+
+def get_satellite_extraction_bands(
+    source,
+):
+    return (
+        get_optical_extraction_bands(
+            source
+        )
+        + S1_MODEL_BANDS
+    )
+
+
+def get_source_model_candidate_bands(
+    source,
+):
+    source = normalize_optical_source(
+        source
+    )
+
+    return list(
+        SOURCE_SATELLITE_MODEL_CANDIDATE_BANDS[
+            source
+        ]
+    )
+
+
+def get_stat_columns(
+    band_names,
+):
+    return [
+        f"{band_name}_mean"
+        for band_name in band_names
+    ]
+
+
+def get_satellite_stat_columns(
+    source,
+):
+    return get_stat_columns(
+        get_satellite_extraction_bands(
+            source
+        )
+    )
+
+
+def get_source_model_candidate_stat_columns(
+    source,
+):
+    return get_stat_columns(
+        get_source_model_candidate_bands(
+            source
+        )
+    )
+
+
+COMMON_SATELLITE_MODEL_STAT_COLUMNS = (
+    get_stat_columns(
+        COMMON_SATELLITE_MODEL_BANDS
+    )
 )
 
 
 QA_STAT_COLUMNS = [
     "Angle_deg_mean",
 ]
+
+
+# ============================================================
+# Backward-compatible aliases
+#
+# These point only to the common matched model set. New code
+# should prefer the explicit helper functions above.
+# ============================================================
+
+PREDICTOR_BANDS = (
+    COMMON_SATELLITE_MODEL_BANDS
+)
+
+STAT_COLUMNS = (
+    COMMON_SATELLITE_MODEL_STAT_COLUMNS
+)
+
+EXPECTED_STAT_KEYS = (
+    STAT_COLUMNS.copy()
+)
 
 
 # ============================================================
@@ -188,7 +327,7 @@ SATELLITE_BASE_EXPORT_COLUMNS = [
     "predictor_support",
     "target_support",
 
-    # Satellite predictor completeness
+    # Extraction completeness
     "missing_stats_count",
     "stats_complete",
 
@@ -196,14 +335,28 @@ SATELLITE_BASE_EXPORT_COLUMNS = [
 ]
 
 
+def get_satellite_export_selectors(
+    source,
+):
+    return (
+        SATELLITE_BASE_EXPORT_COLUMNS
+        + get_satellite_stat_columns(
+            source
+        )
+        + QA_STAT_COLUMNS
+    )
+
+
+# Default alias retained for older diagnostic code.
 SATELLITE_EXPORT_SELECTORS = (
-    SATELLITE_BASE_EXPORT_COLUMNS
-    + STAT_COLUMNS
-    + QA_STAT_COLUMNS
+    get_satellite_export_selectors(
+        "S2"
+    )
 )
 
-# Backward-compatible alias for the Earth Engine satellite export.
-EXPORT_SELECTORS = SATELLITE_EXPORT_SELECTORS
+EXPORT_SELECTORS = (
+    SATELLITE_EXPORT_SELECTORS
+)
 
 
 # ============================================================

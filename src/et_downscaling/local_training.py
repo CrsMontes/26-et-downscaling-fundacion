@@ -7,11 +7,48 @@ from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 
-from .config import END_DATE, OPTICAL_QA_THRESHOLDS_PCT, START_DATE
+from .config import (
+    END_DATE,
+    OPTICAL_QA_THRESHOLDS_PCT,
+    START_DATE,
+    normalize_optical_source,
+)
 from .reference_et_local import build_daily_reference_et, prepare_hourly_era5
-from .schema import STAT_COLUMNS
+from .schema import (
+    COMMON_SATELLITE_MODEL_STAT_COLUMNS,
+    get_satellite_stat_columns,
+    get_source_model_candidate_stat_columns,
+)
 
 MISSING_SENTINEL_MAX = -9990.0
+
+
+def _resolve_optical_source(
+    satellite: pd.DataFrame,
+) -> str:
+    if "optical_source" not in satellite.columns:
+        raise ValueError(
+            "Required column 'optical_source' is missing."
+        )
+
+    values = (
+        satellite["optical_source"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .unique()
+        .tolist()
+    )
+
+    if len(values) != 1:
+        raise ValueError(
+            "Satellite table must contain exactly one optical "
+            f"source. Found: {values}"
+        )
+
+    return normalize_optical_source(
+        values[0]
+    )
 
 
 def _normalize_station_id(table: pd.DataFrame) -> pd.DataFrame:
@@ -177,6 +214,28 @@ def build_training_master(
     satellite = _replace_numeric_sentinels(satellite)
     support = _normalize_station_id(station_support)
 
+    optical_source = (
+        _resolve_optical_source(
+            satellite
+        )
+    )
+
+    extraction_stat_columns = (
+        get_satellite_stat_columns(
+            optical_source
+        )
+    )
+
+    source_model_stat_columns = (
+        get_source_model_candidate_stat_columns(
+            optical_source
+        )
+    )
+
+    common_model_stat_columns = list(
+        COMMON_SATELLITE_MODEL_STAT_COLUMNS
+    )
+
     required_satellite = {
         "station_id",
         "station",
@@ -184,10 +243,11 @@ def build_training_master(
         "number_days",
         "ET_mm_period",
         "modis_good",
+        "optical_source",
         "optical_union_coverage_pct",
         "s1_union_coverage_pct",
         "s1_valid",
-        *STAT_COLUMNS,
+        *extraction_stat_columns,
     }
     missing = required_satellite - set(satellite.columns)
     if missing:
@@ -270,7 +330,33 @@ def build_training_master(
         master["ET_reconstructed_mm_period"] - master["ET_mm_period"]
     )
 
-    master["satellite_predictors_complete"] = master[STAT_COLUMNS].notna().all(axis=1).astype(int)
+    master["satellite_extraction_complete"] = (
+        master[
+            extraction_stat_columns
+        ]
+        .notna()
+        .all(axis=1)
+        .astype(int)
+    )
+
+    master["common_satellite_predictors_complete"] = (
+        master[
+            common_model_stat_columns
+        ]
+        .notna()
+        .all(axis=1)
+        .astype(int)
+    )
+
+    master["source_satellite_predictors_complete"] = (
+        master[
+            source_model_stat_columns
+        ]
+        .notna()
+        .all(axis=1)
+        .astype(int)
+    )
+
     master["target_complete"] = (
         master["ET_mm_period"].notna()
         & master["ETo_mm_period"].notna()
@@ -282,13 +368,39 @@ def build_training_master(
         label = str(int(threshold))
         optical_flag = master["optical_union_coverage_pct"] >= threshold
         master[f"optical_ge_{label}"] = optical_flag.astype(int)
-        master[f"training_candidate_ge_{label}"] = (
+        common_candidate = (
             (master["target_complete"] == 1)
-            & (master["satellite_predictors_complete"] == 1)
+            & (
+                master[
+                    "common_satellite_predictors_complete"
+                ]
+                == 1
+            )
             & (master["meteo_complete"] == 1)
             & (master["s1_valid"] == 1)
             & optical_flag
-        ).astype(int)
+        )
+
+        source_candidate = (
+            (master["target_complete"] == 1)
+            & (
+                master[
+                    "source_satellite_predictors_complete"
+                ]
+                == 1
+            )
+            & (master["meteo_complete"] == 1)
+            & (master["s1_valid"] == 1)
+            & optical_flag
+        )
+
+        master[
+            f"training_candidate_common_ge_{label}"
+        ] = common_candidate.astype(int)
+
+        master[
+            f"training_candidate_source_ge_{label}"
+        ] = source_candidate.astype(int)
 
     master = master.sort_values(["station_id", "period_start"]).reset_index(drop=True)
     daily_reference = daily_reference.sort_values(["station_id", "local_date"]).reset_index(drop=True)

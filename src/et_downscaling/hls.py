@@ -102,7 +102,13 @@ HLS_MEDOID_SCORE_BANDS = [
 # Bit 4: snow/ice
 #
 # Bit 5: water -> retained
-# Bits 6-7: aerosol -> not used as hard filters
+# Bits 6-7: aerosol level
+#
+# The diagnostic reproduction retained the Fmask cloud,
+# adjacent-cloud, shadow, and snow filters for both sensors.
+# High aerosol is additionally excluded for S30 only, following
+# the tested HLS-S30 QA sensitivity. L30 keeps the base Fmask
+# criteria without that additional aerosol exclusion.
 
 HLS_FMASK_CLOUD_BIT = 1
 HLS_FMASK_ADJACENT_BIT = 2

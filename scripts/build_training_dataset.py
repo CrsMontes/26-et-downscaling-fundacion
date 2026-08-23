@@ -72,10 +72,29 @@ def main():
     require_file(chirps_path, "python scripts/export_meteorology_data.py")
 
     print("Loading reusable local inputs...")
-    satellite = pd.read_csv(satellite_path)
-    station_support = pd.read_csv(support_path)
-    era5_hourly = pd.read_csv(era5_path)
-    chirps_daily = pd.read_csv(chirps_path)
+    station_dtype = {
+        "station_id": "string",
+    }
+
+    satellite = pd.read_csv(
+        satellite_path,
+        dtype=station_dtype,
+    )
+
+    station_support = pd.read_csv(
+        support_path,
+        dtype=station_dtype,
+    )
+
+    era5_hourly = pd.read_csv(
+        era5_path,
+        dtype=station_dtype,
+    )
+
+    chirps_daily = pd.read_csv(
+        chirps_path,
+        dtype=station_dtype,
+    )
 
     master, daily_reference = build_training_master(
         satellite=satellite,
@@ -95,9 +114,41 @@ def main():
     print("Reference-ET complete:", int(master["reference_et_complete"].sum()))
     print("Meteorology complete:", int(master["meteo_complete"].sum()))
     print("Target complete:", int(master["target_complete"].sum()))
+    print(
+        "Satellite extraction complete:",
+        int(
+            master[
+                "satellite_extraction_complete"
+            ].sum()
+        ),
+    )
+
     for threshold in (80, 90, 99):
-        column = f"training_candidate_ge_{threshold}"
-        print(f"Training candidates >= {threshold}%:", int(master[column].sum()))
+        common_column = (
+            f"training_candidate_common_ge_{threshold}"
+        )
+
+        source_column = (
+            f"training_candidate_source_ge_{threshold}"
+        )
+
+        print(
+            f"Common-feature candidates >= {threshold}%:",
+            int(
+                master[
+                    common_column
+                ].sum()
+            ),
+        )
+
+        print(
+            f"Source-feature candidates >= {threshold}%:",
+            int(
+                master[
+                    source_column
+                ].sum()
+            ),
+        )
 
     max_reconstruction_error = master["ET_reconstruction_error_mm"].abs().max()
     print("Maximum ET reconstruction error (mm/period):", max_reconstruction_error)

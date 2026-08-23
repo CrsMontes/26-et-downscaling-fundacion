@@ -15,10 +15,9 @@ from .config import (
 
 from .schema import (
     BASE_PROPERTY_NAMES,
-    EXPECTED_STAT_KEYS,
-    PREDICTOR_BANDS,
     QA_STAT_COLUMNS,
-    STAT_COLUMNS,
+    get_satellite_extraction_bands,
+    get_satellite_stat_columns,
 )
 
 from .modis import (
@@ -611,9 +610,11 @@ def get_statistics_reducer():
 # Statistical integrity
 # ============================================================
 
-def get_empty_stats_dictionary():
+def get_empty_stats_dictionary(
+    expected_keys,
+):
     expected_keys = ee.List(
-        EXPECTED_STAT_KEYS
+        expected_keys
     )
 
     return (
@@ -629,6 +630,7 @@ def get_empty_stats_dictionary():
 
 def complete_stats_dictionary(
     raw_dictionary,
+    expected_keys,
 ):
     raw_dictionary = (
         ee.Dictionary(
@@ -637,7 +639,9 @@ def complete_stats_dictionary(
     )
 
     return (
-        get_empty_stats_dictionary()
+        get_empty_stats_dictionary(
+            expected_keys
+        )
         .combine(
             raw_dictionary,
             True,
@@ -647,6 +651,7 @@ def complete_stats_dictionary(
 
 def get_missing_stat_keys(
     raw_dictionary,
+    expected_keys,
 ):
     raw_dictionary = (
         ee.Dictionary(
@@ -656,7 +661,7 @@ def get_missing_stat_keys(
 
     return (
         ee.List(
-            EXPECTED_STAT_KEYS
+            expected_keys
         )
         .removeAll(
             raw_dictionary.keys()
@@ -800,8 +805,24 @@ def calculate_observation(
     )
 
     # ========================================================
-    # Source-neutral model predictors
+    # Rich extraction predictors
+    #
+    # Extraction and model selection are intentionally
+    # separated. Source-specific candidates are retained here,
+    # while model subsets are selected later in local code.
     # ========================================================
+
+    extraction_bands = (
+        get_satellite_extraction_bands(
+            optical_source
+        )
+    )
+
+    stat_columns = (
+        get_satellite_stat_columns(
+            optical_source
+        )
+    )
 
     predictors = (
         optical_predictors
@@ -809,17 +830,17 @@ def calculate_observation(
             s1_predictors
         )
         .select(
-            PREDICTOR_BANDS
+            extraction_bands
         )
         .toFloat()
     )
 
-    # Rename bands before reduction so the local table keeps
-    # explicit *_mean column names with a mean-only reducer.
+    # Rename before reduction so exported columns remain
+    # explicit *_mean variables with a mean-only reducer.
     predictor_statistics_image = (
         predictors.select(
-            PREDICTOR_BANDS,
-            STAT_COLUMNS,
+            extraction_bands,
+            stat_columns,
         )
     )
 
@@ -851,21 +872,24 @@ def calculate_observation(
 
     footprint_missing_keys = (
         get_missing_stat_keys(
-            footprint_stats_raw
+            footprint_stats_raw,
+            stat_columns,
         )
     )
 
     footprint_stats = (
         complete_stats_dictionary(
-            footprint_stats_raw
+            footprint_stats_raw,
+            stat_columns,
         )
     )
 
     # ========================================================
     # Sentinel-1 geometry QA
     #
-    # Angle is exported but is not part of PREDICTOR_BANDS and
-    # therefore does not determine model-feature completeness.
+    # Angle is exported but is not part of the extraction/model
+    # predictor stack and therefore does not determine
+    # predictor completeness.
     # ========================================================
 
     angle_image = (

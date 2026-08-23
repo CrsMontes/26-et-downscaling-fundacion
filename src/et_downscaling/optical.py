@@ -1,12 +1,11 @@
 import ee
 
 from .config import (
-    get_optical_output_label,
-    get_optical_scale,
     normalize_optical_source,
 )
 
 from .hls import (
+    add_hls_indices,
     build_hls_daily_collection,
     build_hls_medoid,
     filter_hls_collection_to_geometry,
@@ -14,11 +13,11 @@ from .hls import (
 )
 
 from .schema import (
-    COMMON_OPTICAL_PREDICTOR_BANDS,
-    COMMON_OPTICAL_REFLECTANCE_BANDS,
+    get_optical_extraction_bands,
 )
 
 from .sentinel2 import (
+    add_s2_indices,
     build_s2_daily_collection,
     build_s2_medoid,
     get_sentinel2_collection,
@@ -26,6 +25,10 @@ from .sentinel2 import (
 
 from .spatial import (
     get_coverage_fraction,
+)
+
+from .config import (
+    get_optical_scale,
 )
 
 
@@ -179,174 +182,28 @@ def build_optical_medoid(
 
 
 # ============================================================
-# Common optical indices
+# Rich source-specific optical extraction stack
 # ============================================================
-
-def _safe_ratio(
-    numerator,
-    denominator,
-    output_name,
-    epsilon=1e-6,
-):
-    numerator = ee.Image(
-        numerator
-    )
-
-    denominator = ee.Image(
-        denominator
-    )
-
-    return (
-        numerator
-        .divide(
-            denominator
-        )
-        .updateMask(
-            denominator
-            .abs()
-            .gt(
-                epsilon
-            )
-        )
-        .rename(
-            output_name
-        )
-        .toFloat()
-    )
-
-
-def add_common_optical_indices(
-    image,
-):
-    """
-    Add only indices with equivalent definitions for S2 and HLS.
-    """
-    image = (
-        ee.Image(
-            image
-        )
-        .select(
-            COMMON_OPTICAL_REFLECTANCE_BANDS
-        )
-        .toFloat()
-    )
-
-    blue = image.select(
-        "Blue"
-    )
-
-    green = image.select(
-        "Green"
-    )
-
-    red = image.select(
-        "Red"
-    )
-
-    nir = image.select(
-        "NIR"
-    )
-
-    swir1 = image.select(
-        "SWIR1"
-    )
-
-    ndvi = _safe_ratio(
-        nir.subtract(
-            red
-        ),
-        nir.add(
-            red
-        ),
-        "NDVI",
-    )
-
-    evi = _safe_ratio(
-        nir
-        .subtract(
-            red
-        )
-        .multiply(
-            2.5
-        ),
-        nir
-        .add(
-            red.multiply(
-                6.0
-            )
-        )
-        .subtract(
-            blue.multiply(
-                7.5
-            )
-        )
-        .add(
-            1.0
-        ),
-        "EVI",
-    )
-
-    savi = _safe_ratio(
-        nir
-        .subtract(
-            red
-        )
-        .multiply(
-            1.5
-        ),
-        nir
-        .add(
-            red
-        )
-        .add(
-            0.5
-        ),
-        "SAVI",
-    )
-
-    ndwi = _safe_ratio(
-        green.subtract(
-            nir
-        ),
-        green.add(
-            nir
-        ),
-        "NDWI",
-    )
-
-    ndmi = _safe_ratio(
-        nir.subtract(
-            swir1
-        ),
-        nir.add(
-            swir1
-        ),
-        "NDMI",
-    )
-
-    return (
-        image
-        .addBands(
-            [
-                ndvi,
-                evi,
-                savi,
-                ndwi,
-                ndmi,
-            ]
-        )
-        .select(
-            COMMON_OPTICAL_PREDICTOR_BANDS
-        )
-        .toFloat()
-    )
-
 
 def build_optical_predictors(
     period_collection,
     geometry,
     source,
 ):
+    """
+    Build the optical extraction stack for one source.
+
+    The exported stack is intentionally richer than the common
+    S2/HLS model feature set. Final feature selection is local.
+
+    HLS FVC must only be used after the source-specific FVC
+    calibration has been regenerated with the corrected HLS
+    spatial selection.
+    """
+    source = normalize_optical_source(
+        source
+    )
+
     medoid = (
         build_optical_medoid(
             period_collection,
@@ -355,10 +212,37 @@ def build_optical_predictors(
         )
     )
 
-    return (
-        add_common_optical_indices(
-            medoid
+    if source == "S2":
+        predictors = (
+            add_s2_indices(
+                medoid
+            )
         )
+
+    elif source == "HLS":
+        predictors = (
+            add_hls_indices(
+                medoid
+            )
+        )
+
+    else:
+        raise ValueError(
+            f"Unsupported optical source: {source}"
+        )
+
+    extraction_bands = (
+        get_optical_extraction_bands(
+            source
+        )
+    )
+
+    return (
+        predictors
+        .select(
+            extraction_bands
+        )
+        .toFloat()
     )
 
 
@@ -478,26 +362,3 @@ def get_optical_coverage(
             scale=source_scale,
         )
     )
-
-
-def get_optical_metadata(
-    source,
-):
-    source = normalize_optical_source(
-        source
-    )
-
-    return {
-        "source":
-            source,
-
-        "output_label":
-            get_optical_output_label(
-                source
-            ),
-
-        "scale_m":
-            get_optical_scale(
-                source
-            ),
-    }

@@ -25,7 +25,7 @@ from et_downscaling.dataset import (
 from et_downscaling.export import export_feature_collection
 from et_downscaling.modis import build_modis_inputs
 from et_downscaling.optical import get_optical_collection
-from et_downscaling.schema import SATELLITE_EXPORT_SELECTORS
+from et_downscaling.schema import get_satellite_export_selectors
 from et_downscaling.sentinel1 import get_sentinel1_collection
 
 
@@ -119,6 +119,9 @@ def main():
     optical_source = normalize_optical_source(args.optical_source)
     optical_label = get_optical_output_label(optical_source)
     optical_scale = get_optical_scale(optical_source)
+    export_selectors = get_satellite_export_selectors(
+        optical_source
+    )
 
     project_root = Path(__file__).resolve().parents[1]
     source_directory = project_root / "outputs" / "raw" / "satellite" / optical_label
@@ -190,7 +193,7 @@ def main():
                 downloaded = export_feature_collection(
                     feature_collection=output["all"],
                     output_filename=relative.as_posix(),
-                    selectors=SATELLITE_EXPORT_SELECTORS,
+                    selectors=export_selectors,
                 )
                 chunk_paths.append(downloaded)
 
