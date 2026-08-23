@@ -2,50 +2,85 @@
 
 ## Problem
 
-The HLS FVC endmembers currently stored in `config/fvc_endmembers.json` were calibrated before the diagnostic reproduction identified a spatial-selection problem in HLS. In that earlier calibration, HLS assets were selected with `filterBounds()` over the calibration geometry, and the resulting HLS sample could include assets whose MGRS tile identifier was not local to the station footprint.
+The original HLS FVC endmembers were calibrated before the diagnostic
+reproduction identified a spatial-selection problem in HLS.
 
-Because FVC is derived from source-specific NDVI endmembers, an HLS calibration produced from a potentially contaminated optical sample must not be treated as final production calibration.
+HLS assets selected only with `filterBounds()` could include products whose
+MGRS tile identifier was not local to the station footprint. Therefore, the
+previous HLS FVC calibration could have been influenced by observations outside
+the intended local HLS tile support.
 
-## Historical calibration strategy to preserve
+Because FVC is derived from source-specific NDVI endmembers, the previous HLS
+calibration could not be treated as final after correcting the HLS spatial
+selection.
 
-This correction does **not** redefine the FVC method. It preserves the diagnosed two-stage global percentile strategy:
+## Alternatives
 
-1. use the 138 MODIS 8-day periods from 2021–2023;
-2. calibrate HLS independently from Sentinel-2;
-3. compute coverage from the common valid support of `Green`, `Red`, and `NIR`;
-4. retain station-period observations with coverage >= 80%;
-5. calculate NDVI and NDWI from the optical medoid;
-6. exclude water pixels using the existing rule `NDWI > 0`;
-7. within each valid footprint-period, use NDVI P05 and P95 as low/high candidates;
-8. across all valid footprint-period candidates, use the 0.05 and 0.95 quantiles as the global HLS NDVI endmembers.
+1. Retain the previous HLS FVC endmembers.
+2. Remove HLS FVC from the production extraction.
+3. Recalibrate HLS FVC using the corrected HLS spatial-selection procedure
+   while preserving the diagnosed FVC formulation.
 
-The Sentinel-2 FVC calibration is not changed by this correction because the diagnosed HLS MGRS-selection problem does not apply to the Sentinel-2 calibration.
+## Decision before recalibration
 
-## Correction
+Recalibrate HLS FVC using the corrected MGRS spatial-selection procedure.
 
-The HLS recalibration must use the **current production HLS preprocessing** and must restrict the HLS collection independently for every station footprint using the verified local MGRS tile set before building the medoid.
+The recalibration must preserve the existing FVC formulation so that the test
+isolates the effect of correcting HLS spatial support rather than changing
+multiple methodological components simultaneously.
 
-The recalibration script therefore calls:
+## Calibration strategy
 
-- `get_hls_collection()` for the source collection;
-- `filter_hls_collection_to_geometry()` for each station footprint and period;
-- `get_local_hls_mgrs_tiles()` to retain spatial-selection provenance;
-- `build_hls_medoid()` after local filtering.
+The recalibration preserves the two-stage global percentile strategy used by
+the existing FVC workflow.
 
-The calibration is performed at the native HLS working scale of 30 m.
+For each HLS station-period observation:
+
+1. use the MODIS 8-day periods from 2021–2023;
+2. process HLS independently from Sentinel-2;
+3. restrict HLS observations to the verified local MGRS tiles associated with
+   each station footprint;
+4. construct the optical temporal medoid using the production HLS processing
+   workflow;
+5. calculate valid optical coverage over the MODIS footprint;
+6. retain observations with optical coverage >= 80%;
+7. calculate NDVI and NDWI from the HLS medoid;
+8. exclude water pixels using the existing NDWI-based rule;
+9. calculate footprint NDVI P05 and P95 values as low- and high-endmember
+   candidates;
+10. combine all eligible station-period candidates and calculate global
+    endmembers from the candidate distributions.
+
+The calibration is performed using the HLS 30 m working grid.
+
+## Spatial-selection correction
+
+The recalibration uses the corrected HLS preprocessing in which source products
+are restricted to verified local MGRS tiles before the temporal medoid is
+constructed.
+
+This correction prevents non-local HLS assets admitted by `filterBounds()` from
+contributing to the station-period calibration sample.
+
+The Sentinel-2 FVC calibration is not modified because the diagnosed
+spatial-selection problem was specific to HLS.
 
 ## Safety rule
 
-The diagnostic script **must not overwrite** `config/fvc_endmembers.json` automatically. It writes:
+The diagnostic recalibration must not overwrite production FVC configuration
+automatically.
 
-- the complete 690-row HLS station-period diagnostic table;
-- a summary comparing the current and candidate HLS calibration;
-- a candidate FVC configuration that preserves the existing Sentinel-2 calibration.
+Candidate values must first be inspected and accepted.
 
-The production configuration is updated only after the recalibration result has been inspected and accepted.
+The production configuration is updated only after the recalibration result has
+been inspected and accepted.
 
-## Decision status
+## Empirical result
 
-**Pending empirical recalibration result.**
+The corrected HLS recalibration was completed using the verified local MGRS
+selection and the preserved calibration method.
 
-The old HLS endmembers remain non-final until this test is completed. Sentinel-2 FVC remains available with its existing source-specific calibration.
+The diagnostic evaluated all 690 possible station-period combinations:
+
+```text
+5 stations × 138 MODIS periods = 690 station-period combinations
