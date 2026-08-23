@@ -7,6 +7,7 @@ from .config import (
     S1_FULL_COVERAGE,
     S1_ORBIT_PASS,
     S1_RELATIVE_ORBIT,
+    S1_FOOTPRINT_REDUCTION_SCALE_M,
     get_optical_output_label,
     get_optical_scale,
     normalize_optical_source,
@@ -16,8 +17,9 @@ from .config import (
 from .schema import (
     BASE_PROPERTY_NAMES,
     QA_STAT_COLUMNS,
-    get_satellite_extraction_bands,
-    get_satellite_stat_columns,
+    S1_MODEL_BANDS,
+    get_optical_extraction_bands,
+    get_stat_columns,
 )
 
 from .modis import (
@@ -805,52 +807,55 @@ def calculate_observation(
     )
 
     # ========================================================
-    # Rich extraction predictors
+    # Source-specific footprint statistics
     #
-    # Extraction and model selection are intentionally
-    # separated. Source-specific candidates are retained here,
-    # while model subsets are selected later in local code.
+    # Optical predictors are averaged at their operational
+    # source scale (20 m for S2, 30 m for HLS).
+    #
+    # Sentinel-1 is reduced independently using its 10 m
+    # sampling grid so the same footprint-scale radar summary
+    # is used in the S2 and HLS training tables.
+    # Temporal compositing uses the median and spatial
+    # footprint aggregation uses the mean in dB.
     # ========================================================
 
-    extraction_bands = (
-        get_satellite_extraction_bands(
+    optical_extraction_bands = (
+        get_optical_extraction_bands(
             optical_source
+        )
+    )
+
+    optical_stat_columns = (
+        get_stat_columns(
+            optical_extraction_bands
+        )
+    )
+
+    s1_stat_columns = (
+        get_stat_columns(
+            S1_MODEL_BANDS
         )
     )
 
     stat_columns = (
-        get_satellite_stat_columns(
-            optical_source
-        )
-    )
-
-    predictors = (
-        optical_predictors
-        .addBands(
-            s1_predictors
-        )
-        .select(
-            extraction_bands
-        )
-        .toFloat()
-    )
-
-    # Rename before reduction so exported columns remain
-    # explicit *_mean variables with a mean-only reducer.
-    predictor_statistics_image = (
-        predictors.select(
-            extraction_bands,
-            stat_columns,
-        )
+        optical_stat_columns
+        + s1_stat_columns
     )
 
     statistics_reducer = (
         get_statistics_reducer()
     )
 
-    footprint_stats_raw = (
+    optical_statistics_image = (
+        optical_predictors.select(
+            optical_extraction_bands,
+            optical_stat_columns,
+        )
+    )
+
+    optical_stats_raw = (
         ee.Dictionary(
-            predictor_statistics_image
+            optical_statistics_image
             .reduceRegion(
                 reducer=(
                     statistics_reducer
@@ -870,17 +875,70 @@ def calculate_observation(
         )
     )
 
-    footprint_missing_keys = (
+    optical_missing_keys = (
         get_missing_stat_keys(
-            footprint_stats_raw,
-            stat_columns,
+            optical_stats_raw,
+            optical_stat_columns,
+        )
+    )
+
+    optical_stats = (
+        complete_stats_dictionary(
+            optical_stats_raw,
+            optical_stat_columns,
+        )
+    )
+
+    s1_stats_raw = (
+        ee.Dictionary(
+            s1_predictors
+            .select(
+                S1_MODEL_BANDS,
+                s1_stat_columns,
+            )
+            .reduceRegion(
+                reducer=(
+                    ee.Reducer.mean()
+                ),
+                geometry=(
+                    footprint_geometry
+                ),
+                crs=(
+                    ANALYSIS_CRS
+                ),
+                scale=(
+                    S1_FOOTPRINT_REDUCTION_SCALE_M
+                ),
+                maxPixels=1e7,
+                tileScale=8,
+            )
+        )
+    )
+
+    s1_missing_keys = (
+        get_missing_stat_keys(
+            s1_stats_raw,
+            s1_stat_columns,
+        )
+    )
+
+    s1_stats = (
+        complete_stats_dictionary(
+            s1_stats_raw,
+            s1_stat_columns,
         )
     )
 
     footprint_stats = (
-        complete_stats_dictionary(
-            footprint_stats_raw,
-            stat_columns,
+        optical_stats.combine(
+            s1_stats,
+            True,
+        )
+    )
+
+    footprint_missing_keys = (
+        optical_missing_keys.cat(
+            s1_missing_keys
         )
     )
 
@@ -915,7 +973,7 @@ def calculate_observation(
                     ANALYSIS_CRS
                 ),
                 scale=(
-                    optical_scale
+                    S1_FOOTPRINT_REDUCTION_SCALE_M
                 ),
                 maxPixels=1e7,
                 tileScale=8,

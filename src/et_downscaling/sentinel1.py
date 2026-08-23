@@ -4,6 +4,7 @@ from .config import (
     END_DATE,
     S1_ORBIT_PASS,
     S1_RELATIVE_ORBIT,
+    S1_FOOTPRINT_REDUCTION_SCALE_M,
     START_DATE,
 )
 
@@ -209,4 +210,5 @@ def get_s1_coverage(
     return get_coverage_fraction(
         joint_mask,
         geometry,
+        scale=S1_FOOTPRINT_REDUCTION_SCALE_M,
     )
