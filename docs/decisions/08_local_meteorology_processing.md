@@ -46,5 +46,16 @@ A sensitivity test showed a maximum change of:
 - 3.75e-7 mm day-1 in ETr.
 
 The correction therefore enforces physical consistency while having negligible
-
 numerical influence on the reference-ET estimates.
+
+## Implementation cleanup
+
+The superseded server-side meteorology and reference-ET implementations were
+removed from the active source tree after the local workflow was verified. The
+authoritative modules are `meteorology_export.py` for source sampling and
+`reference_et_local.py` / `local_training.py` for local derivation. Historical
+implementations remain recoverable through Git.
+
+## Status
+
+Accepted and implemented.

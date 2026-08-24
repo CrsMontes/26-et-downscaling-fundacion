@@ -7,10 +7,10 @@ from .config import (
     MODIS_ET_SCALE_FACTOR,
     MODIS_REQUIRE_STRICT_QC,
     MODIS_STRICT_SCF_MAX,
-    SAMPLES_ASSET,
     START_DATE,
-    STATION_FIELD,
 )
+
+from .stations import get_station_collection
 
 
 MODIS_COLLECTION_ID = "MODIS/061/MOD16A2GF"
@@ -208,14 +208,10 @@ def assign_station_footprints(
                 footprint.geometry(),
                 {
                     "station":
-                        point.get(
-                            STATION_FIELD
-                        ),
+                        point.get("station"),
 
                     "station_id":
-                        point.get(
-                            "system:index"
-                        ),
+                        point.get("station_id"),
 
                     "longitude":
                         coordinates.get(0),
@@ -578,11 +574,7 @@ def prepare_modis_et(
 # ============================================================
 
 def build_modis_inputs():
-    samples = (
-        ee.FeatureCollection(
-            SAMPLES_ASSET
-        )
-    )
+    samples = get_station_collection()
 
     modis_collection = (
         get_modis_collection()

@@ -34,3 +34,6 @@ scripts/export_project_report.py
 # Operating system
 .DS_Store
 Thumbs.db
+
+# Archived field source and reconstruction files
+data/field/archive/

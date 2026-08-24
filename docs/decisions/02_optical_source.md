@@ -14,7 +14,7 @@ Controlled diagnostics were performed over 138 MODIS periods and five station fo
 
 At 90% optical coverage:
 - Sentinel-2: 477 optical observations and 349 observations jointly supported by Sentinel-1.
-- HLS combined: 361 optical observations and 257 jointly supported by Sentinel-1.
+- HLS combined: 361 optical observations and 256 observations jointly supported by Sentinel-1.
 
 A paired leave-one-station-out comparison used exactly the same 243 station-period observations.
 

@@ -1,0 +1,111 @@
+{
+  "type": "FeatureCollection",
+  "name": "fundacion_stations",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "station_id": "ST01",
+        "station": "Clean pasture",
+        "station_slug": "clean_pasture",
+        "canvas": "#30",
+        "installation_date": "2022-03-10",
+        "removal_date": "2022-07-01",
+        "installation_conforms_manual": true,
+        "inside_basin": true,
+        "reference_et": "ETo"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -74.421552,
+          10.658272
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "station_id": "ST02",
+        "station": "Oil palm",
+        "station_slug": "oil_palm",
+        "canvas": "#54",
+        "installation_date": "2022-03-11",
+        "removal_date": "2022-07-01",
+        "installation_conforms_manual": false,
+        "inside_basin": true,
+        "reference_et": "ETr"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -74.362748,
+          10.620151
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "station_id": "ST03",
+        "station": "Banana",
+        "station_slug": "banana",
+        "canvas": "#54",
+        "installation_date": "2022-03-11",
+        "removal_date": "2022-07-01",
+        "installation_conforms_manual": false,
+        "inside_basin": true,
+        "reference_et": "ETr"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -74.346754,
+          10.626894
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "station_id": "ST04",
+        "station": "Mangrove",
+        "station_slug": "mangrove",
+        "canvas": "#54",
+        "installation_date": "2022-03-17",
+        "removal_date": "2022-07-01",
+        "installation_conforms_manual": false,
+        "inside_basin": false,
+        "reference_et": "ETr"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -74.360002,
+          10.766952
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "station_id": "ST05",
+        "station": "Dry forest",
+        "station_slug": "dry_forest",
+        "canvas": "#54",
+        "installation_date": "2022-03-10",
+        "removal_date": "2022-07-01",
+        "installation_conforms_manual": false,
+        "inside_basin": true,
+        "reference_et": "ETr"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -74.117804,
+          10.485199
+        ]
+      }
+    }
+  ]
+}

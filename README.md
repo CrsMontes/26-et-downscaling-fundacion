@@ -1,195 +1,179 @@
-# ET Downscaling Dataset Pipeline
+# ET Downscaling — Fundación River Basin
 
-Reproducible Python and Google Earth Engine workflow for constructing a multiscale evapotranspiration (ET) dataset by integrating MODIS ET observations with Sentinel-2, Sentinel-1, ERA5-Land, and CHIRPS predictors for subsequent ET downscaling.
+Reproducible workflow for estimating and downscaling MODIS evapotranspiration
+in the Fundación River Basin, Colombia, using Sentinel-2, Sentinel-1,
+ERA5-Land, and CHIRPS.
 
-## Workflow
+The current production design was rebuilt after a methodological diagnostic of
+the original workflow. The active pipeline deliberately separates coarse-target
+training from fine-grid prediction to avoid pseudoreplication and false claims
+of 20 m validation.
+
+## Current production design
 
 ```text
-MODIS ET
-   +
-Sentinel-2
-Sentinel-1
-ERA5-Land
-CHIRPS
-   ↓
-Quality control
-   ↓
-Multiscale predictor extraction
-   ├── MODIS footprint
-   └── Local 60 × 60 m support
-   ↓
-ET modeling dataset
+MODIS MOD16A2GF ET
+        +
+Sentinel-2 predictors
+Sentinel-1 predictors
+ERA5-Land + CHIRPS
+        ↓
+MODIS-footprint training table
+        ↓
+Kc = ET_MODIS / ETo
+        ↓
+Spatially blocked model validation
+        ↓
+Selected RF: 25 predictors
+        ↓
+Sentinel-2 20 m production grid
+        ↓
+Fine Kc spatial pattern
+        ↓
+MODIS-constrained ET product
 ```
 
-## Data sources
+### Spatial support
 
-| Component | Dataset |
+- MODIS ET is the coarse target.
+- One training observation is one station × one MODIS footprint × one MODIS
+  period.
+- Fine optical/radar pixels inside a MODIS footprint are not treated as
+  independent ET observations.
+- Sentinel-2 uses a 20 m working and prediction grid.
+- Sentinel-1 is temporally composited first and summarized at 10 m only when
+  producing footprint-scale training statistics; 10 m is not an ET validation
+  resolution.
+- Meteorological variables retain coarse atmospheric support.
+
+## Accepted primary configuration
+
+| Component | Current choice |
 |---|---|
-| Evapotranspiration | `MODIS/061/MOD16A2GF` |
-| Optical predictors | `COPERNICUS/S2_SR_HARMONIZED` |
-| Cloud quality | `GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED` |
-| Radar predictors | `COPERNICUS/S1_GRD` |
-| Meteorology | `ECMWF/ERA5_LAND/HOURLY` |
-| Precipitation | `UCSB-CHG/CHIRPS/DAILY` |
+| ET target | `MODIS/061/MOD16A2GF` |
+| Target variable | `Kc_target = ET_MODIS / ETo` |
+| Primary optical source | Sentinel-2 SR Harmonized |
+| S2 cloud QA | Cloud Score+ `cs_cdf >= 0.60` |
+| Prediction grid | 20 m |
+| Sentinel-1 | relative orbit 77, ascending |
+| Radar temporal composite | median |
+| Meteorology | ERA5-Land + CHIRPS |
+| Final model | Random Forest, 25 predictors |
+| Primary validation | ~10 km spatial blocks |
+| Basin boundary | `data/boundaries/fundacion_basin.geojson` |
 
-The predictor set includes Sentinel-2 surface reflectance, NDVI, NDMI, NDWI, Sentinel-1 backscatter metrics, meteorological variables, precipitation, and MODIS ET targets.
+Combined HLS S30 + L30 remains an operational 30 m alternative, but it is not
+the selected primary production source.
 
-## Multiscale structure
+## Final model selection
 
-Each valid MODIS observation generates two records:
+The final Sentinel-2 training population contains 349 station-period
+observations at optical coverage >= 90%.
 
-- `footprint`: predictors summarized over the MODIS ET footprint.
-- `local_60m`: predictors summarized over a local 60 × 60 m area.
+Spatial validation produced:
 
-The ET value associated with `local_60m` remains the parent MODIS footprint ET observation and is **not an independent 60 m ET measurement**.
+| Model | R2 | RMSE | MAE | KGE |
+|---|---:|---:|---:|---:|
+| RF common, 25 predictors | 0.233 | 0.286 | 0.214 | 0.250 |
+| RF S2 full, 31 predictors | 0.225 | 0.287 | 0.213 | 0.238 |
+| MODIS persistence baseline | 0.463 | 0.239 | 0.154 | 0.724 |
 
-For model development, records with `scale == "footprint"` should be used for training. The `local_60m` records are intended for subsequent model application.
+The 25-predictor RF is selected for parsimony. The stronger persistence
+baseline is retained as an important limitation: coarse temporal persistence is
+more predictive than the RF, but it does not provide subpixel spatial
+information.
 
-## Requirements
+See `docs/decisions/11_final_kc_model.md` for the full decision record.
 
-- Python ≥ 3.12
-- Google Earth Engine account
-- Google Cloud Project with Earth Engine access
+## Reproducible execution to the current checkpoint
 
-The default sample asset is:
-
-```text
-projects/ee-change/assets/ETP_samples
-```
-
-The sample asset and processing parameters can be changed in:
-
-```text
-src/et_downscaling/config.py
-```
-
-## Installation and usage
-
-### Local environment
-
-Clone the repository:
-
-```bash
-git clone https://github.com/CrsMontes/26-et-downscaling-fundacion.git
-cd 26-et-downscaling-fundacion
-```
-
-Create the Conda environment:
+Create the environment and install the package:
 
 ```bash
 conda env create -f environment.yml
 conda activate et-fundacion
-```
-
-Install the project in editable mode:
-
-```bash
 pip install -e .
 ```
 
-Authenticate Google Earth Engine:
+Authenticate Earth Engine:
 
 ```bash
 earthengine authenticate
 ```
 
-Run the dataset pipeline:
+Export reusable meteorological inputs:
 
 ```bash
-python scripts/build_training_dataset.py
+python scripts/export_meteorology_data.py
 ```
 
-The workflow will request a Google Cloud Project ID with Earth Engine access.
+Export Sentinel-2 + Sentinel-1 footprint predictors:
 
-### Google Colab
-
-Start from a new Colab runtime and run:
-
-```python
-!git clone https://github.com/CrsMontes/26-et-downscaling-fundacion.git
-%cd 26-et-downscaling-fundacion
-%pip install .
+```bash
+python scripts/export_satellite_data.py --optical-source S2
 ```
 
-Verify that the package was installed correctly:
+Build the local training master:
 
-```python
-import et_downscaling
-print(et_downscaling.__file__)
+```bash
+python scripts/build_training_dataset.py --optical-source S2
 ```
 
-Authenticate Google Earth Engine:
+Train and validate the candidate models and write the selected production RF:
 
-```python
-import ee
-ee.Authenticate()
+```bash
+python scripts/train_s2_kc_models.py
 ```
 
-Run the pipeline:
-
-```python
-%run scripts/build_training_dataset.py
-```
-
-When prompted, enter a Google Cloud Project ID available to your Earth Engine account.
-
-Generated datasets are written to:
-
-```text
-outputs/
-```
-
-In Google Colab, the `outputs/` directory is temporary. Download or copy any required results before the runtime is deleted.
-
-## Configuration
-
-The main processing parameters are defined in:
-
-```text
-src/et_downscaling/config.py
-```
-
-This includes:
-
-- Analysis start and end dates
-- Spatial resolution and CRS
-- Sentinel-2 quality threshold
-- Sentinel-1 orbit configuration
-- ERA5-Land search radius
-- Sample asset
-- Output filename
-
-`START_DATE` is inclusive and `END_DATE` is exclusive.
+Generated data and fitted models are written under `outputs/`, which is ignored
+by Git because the files are reproducible and can be large.
 
 ## Project structure
 
 ```text
 26-et-downscaling-fundacion/
-├── .github/
-│   └── CODEOWNERS
+├── config/
+│   └── fvc_endmembers.json
+├── data/
+│   └── boundaries/
+│       └── fundacion_basin.geojson
+├── docs/
+│   └── decisions/
 ├── scripts/
-│   └── build_training_dataset.py
+│   ├── build_training_dataset.py
+│   ├── export_meteorology_data.py
+│   ├── export_satellite_data.py
+│   ├── recalibrate_hls_fvc.py
+│   └── train_s2_kc_models.py
 ├── src/
 │   └── et_downscaling/
-│       ├── __init__.py
 │       ├── config.py
 │       ├── dataset.py
-│       ├── export.py
-│       ├── meteorology.py
+│       ├── hls.py
+│       ├── local_training.py
+│       ├── meteorology_export.py
+│       ├── model_spec.py
 │       ├── modis.py
-│       ├── schema.py
+│       ├── optical.py
+│       ├── reference_et_local.py
 │       ├── sentinel1.py
-│       ├── sentinel2.py
-│       └── spatial.py
-├── .gitignore
+│       └── sentinel2.py
 ├── environment.yml
-├── LICENSE
 ├── pyproject.toml
 └── README.md
 ```
 
+## Methodological decision records
+
+The `docs/decisions/` directory records changes relative to the historical
+workflow. Important corrections include MODIS QC handling, S2/HLS source
+selection, the Kc target, Sentinel-1 orbit selection, spatial support,
+local meteorological processing, HLS FVC recalibration, and final model
+selection.
+
+Historical diagnostic code and removed experimental modules remain recoverable
+through Git history rather than being kept in the active production source tree.
+
 ## License
 
-This project is licensed under the GNU General Public License v3.0 (`GPL-3.0-only`). See the `LICENSE` file for details.
-
-Copyright (C) 2026 C. Montes-Chaura.
+GNU General Public License v3.0 (`GPL-3.0-only`).

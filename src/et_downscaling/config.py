@@ -2,11 +2,10 @@ from datetime import date, timedelta
 
 
 # ============================================================
-# Samples
+# Local station input
 # ============================================================
 
-SAMPLES_ASSET = "projects/ee-change/assets/ETP_samples"
-STATION_FIELD = "Name"
+STATIONS_GEOJSON_PATH = "data/stations/fundacion_stations.geojson"
 
 
 # ============================================================

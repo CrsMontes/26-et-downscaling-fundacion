@@ -104,8 +104,10 @@ target and does not imply fine-resolution ET validation.
 - within-footprint standard deviation
 - within-footprint percentiles
 
-They remain diagnostic/experimental components rather than primary model
-features.
+The thermal experiment is retained as a documented negative result rather than
+as active production code. Within-footprint heterogeneity statistics remain
+excluded because they are not scale-transferable to a single 20 m prediction
+cell.
 
 ## HLS FVC calibration
 
