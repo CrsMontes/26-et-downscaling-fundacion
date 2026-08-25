@@ -1,4 +1,4 @@
-﻿"""Area-of-applicability utilities for the final Kc model.
+"""Area-of-applicability utilities for the final Kc model.
 
 The implementation follows the dissimilarity-index framework of
 Meyer and Pebesma (2021).
@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import ee
 import numpy as np
 import pandas as pd
 from sklearn.metrics import pairwise_distances
@@ -386,3 +387,199 @@ def calculate_prediction_di(
     ).astype("uint8")
 
     return result
+
+def build_aoa_images(
+    model_stack: ee.Image,
+    specification: dict,
+) -> dict[str, ee.Image]:
+    """Calculate DI and AOA for a predictor image stack in Earth Engine.
+
+    Prediction DI is calculated against the complete final training
+    reference population. The implementation uses matrix algebra to avoid
+    constructing one distance image per training observation.
+    """
+
+    features = list(specification["features"])
+
+    if features != list(COMMON_MODEL_FEATURES):
+        raise ValueError(
+            "AOA predictors differ from the final model specification."
+        )
+
+    means = np.asarray(
+        specification["means"],
+        dtype=float,
+    )
+
+    standard_deviations = np.asarray(
+        specification["standard_deviations"],
+        dtype=float,
+    )
+
+    weights = np.asarray(
+        specification["weights"],
+        dtype=float,
+    )
+
+    reference = np.asarray(
+        specification["weighted_training_reference"],
+        dtype=float,
+    )
+
+    if reference.ndim != 2:
+        raise ValueError(
+            "AOA training reference must be a two-dimensional matrix."
+        )
+
+    if reference.shape[1] != len(features):
+        raise ValueError(
+            "AOA training reference predictor count is inconsistent."
+        )
+
+    reference_rows = int(reference.shape[0])
+
+    reference_norm_squared = (
+        np.sum(
+            reference ** 2,
+            axis=1,
+        )
+        .reshape(-1, 1)
+    )
+
+    predictor_image = (
+        ee.Image(model_stack)
+        .select(features)
+        .toDouble()
+    )
+
+    mean_image = (
+        ee.Image.constant(
+            means.tolist()
+        )
+        .rename(features)
+        .toDouble()
+    )
+
+    standard_deviation_image = (
+        ee.Image.constant(
+            standard_deviations.tolist()
+        )
+        .rename(features)
+        .toDouble()
+    )
+
+    weight_image = (
+        ee.Image.constant(
+            weights.tolist()
+        )
+        .rename(features)
+        .toDouble()
+    )
+
+    weighted = (
+        predictor_image
+        .subtract(mean_image)
+        .divide(standard_deviation_image)
+        .multiply(weight_image)
+    )
+
+    # Predictor vector per pixel: [predictors, 1].
+    predictor_column = (
+        weighted
+        .toArray()
+        .toArray(1)
+    )
+
+    # Final training reference matrix: [training rows, predictors].
+    reference_matrix = ee.Image.constant(
+        ee.Array(
+            reference.tolist()
+        )
+    )
+
+    # R * x -> [training rows, 1].
+    dot_product = (
+        reference_matrix
+        .matrixMultiply(
+            predictor_column
+        )
+    )
+
+    reference_norm_image = ee.Image.constant(
+        ee.Array(
+            reference_norm_squared.tolist()
+        )
+    )
+
+    # ||x||² repeated for all training-reference rows.
+    predictor_norm_squared = (
+        weighted
+        .pow(2)
+        .reduce(ee.Reducer.sum())
+        .toArray()
+        .toArray(1)
+        .arrayRepeat(
+            0,
+            reference_rows,
+        )
+    )
+
+    # Squared Euclidean distance:
+    # ||r - x||² = ||r||² + ||x||² - 2(r·x).
+    distance_squared = (
+        reference_norm_image
+        .add(predictor_norm_squared)
+        .subtract(
+            dot_product.multiply(2)
+        )
+    )
+
+    nearest_squared = (
+        distance_squared
+        .arrayReduce(
+            ee.Reducer.min(),
+            [0],
+        )
+        .arrayGet(
+            ee.Image.constant(
+                [0, 0]
+            )
+        )
+        .max(0)
+    )
+
+    nearest_distance = (
+        nearest_squared
+        .sqrt()
+        .rename("nearest_training_distance")
+        .toFloat()
+    )
+
+    dissimilarity_index = (
+        nearest_distance
+        .divide(
+            float(
+                specification["mean_training_distance"]
+            )
+        )
+        .rename("DI")
+        .toFloat()
+    )
+
+    aoa = (
+        dissimilarity_index
+        .lte(
+            float(
+                specification["threshold"]
+            )
+        )
+        .rename("AOA")
+        .toByte()
+    )
+
+    return {
+        "nearest_training_distance": nearest_distance,
+        "di": dissimilarity_index,
+        "aoa": aoa,
+    }
+
