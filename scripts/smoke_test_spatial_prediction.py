@@ -1,4 +1,4 @@
-﻿"""Run one end-to-end 20 m ET production smoke test.
+"""Run one end-to-end 20 m ET production smoke test.
 
 This is intentionally the only pre-production raster test. It verifies:
 
@@ -6,7 +6,7 @@ This is intentionally the only pre-production raster test. It verifies:
 2. Earth Engine and local sklearn predictions agree numerically;
 3. the 25-band spatial predictor stack uses the accepted definitions;
 4. Sentinel-2 and Sentinel-1 support are sufficient for the test period;
-5. all eligible parent MODIS cells in the local smoke window conserve ET after proportional reconciliation;
+5. the parent MODIS cell containing ST01 conserves ET after proportional reconciliation;
 6. optionally, one 20 m GeoTIFF is downloaded locally.
 """
 
@@ -223,75 +223,61 @@ def validate_ee_model_transfer(
     print("RF transfer: PASS")
 
 
-def get_max_conservation_error(
-    conservation_error: ee.Image,
-    geometry: ee.Geometry,
-    modis_projection: ee.Projection,
-) -> tuple[float, int]:
-    """Evaluate all eligible MODIS parent pixels in the local smoke window."""
-    error = ee.Image(conservation_error).abs()
-
-    stats = (
-        error
-        .reduceRegion(
-            reducer=(
-                ee.Reducer.max()
-                .combine(
-                    reducer2=ee.Reducer.count(),
-                    sharedInputs=True,
-                )
-            ),
-            geometry=geometry,
-            crs=modis_projection,
-            scale=modis_projection.nominalScale(),
-            maxPixels=10000,
-            tileScale=4,
-        )
-        .getInfo()
-    )
-
-    maximum = stats.get("ET_conservation_error_mm_max")
-    count = stats.get("ET_conservation_error_mm_count")
-
-    if maximum is None or count is None or int(count) == 0:
-        raise RuntimeError(
-            "No MODIS pixels passed production eligibility "
-            "inside the local smoke-test window."
-        )
-
-    return float(maximum), int(count)
-
-
-def get_support_summary(
+def get_parent_qa_at_point(
     outputs: dict[str, ee.Image],
-    geometry: ee.Geometry,
+    point: ee.Geometry,
     modis_projection: ee.Projection,
 ) -> dict[str, float]:
-    """Summarize coarse support over the local smoke-test window."""
+    """Evaluate production support and conservation at the ST01 parent MODIS cell."""
     qa = (
         outputs["optical_valid_fraction"]
         .addBands(outputs["s1_valid_fraction"])
         .addBands(outputs["model_stack_valid_fraction"])
         .addBands(outputs["fine_fill_fraction"])
+        .addBands(outputs["eligible"].rename("eligible"))
+        .addBands(
+            outputs["conservation_error"]
+            .abs()
+            .rename("abs_conservation_error_mm")
+        )
     )
 
     values = (
         qa
         .reduceRegion(
-            reducer=ee.Reducer.mean(),
-            geometry=geometry,
+            reducer=ee.Reducer.first(),
+            geometry=point,
             crs=modis_projection,
             scale=modis_projection.nominalScale(),
-            maxPixels=10000,
-            tileScale=4,
+            maxPixels=100,
         )
         .getInfo()
     )
 
+    required = [
+        "optical_valid_fraction",
+        "s1_valid_fraction",
+        "model_stack_valid_fraction",
+        "fine_fill_fraction",
+        "eligible",
+        "abs_conservation_error_mm",
+    ]
+
+    missing = [
+        key
+        for key in required
+        if values.get(key) is None
+    ]
+
+    if missing:
+        raise RuntimeError(
+            "Missing ST01 parent QA values: "
+            + ", ".join(missing)
+        )
+
     return {
-        key: float(value)
-        for key, value in values.items()
-        if value is not None
+        key: float(values[key])
+        for key in required
     }
 
 
@@ -320,8 +306,8 @@ def download_et_image(
 
 
 
-def build_smoke_geometry() -> ee.Geometry:
-    """Build a small deterministic production window for integration QA."""
+def build_smoke_geometry() -> tuple[ee.Geometry, ee.Geometry]:
+    """Build the deterministic ST01 smoke point and local processing window."""
     stations = load_station_dataframe()
 
     selected = stations.loc[
@@ -335,16 +321,21 @@ def build_smoke_geometry() -> ee.Geometry:
 
     row = selected.iloc[0]
 
-    return (
-        ee.Geometry.Point(
-            [
-                float(row["longitude"]),
-                float(row["latitude"]),
-            ]
-        )
+    point = ee.Geometry.Point(
+        [
+            float(row["longitude"]),
+            float(row["latitude"]),
+        ]
+    )
+
+    geometry = (
+        point
         .buffer(SMOKE_BUFFER_M)
         .bounds()
     )
+
+    return point, geometry
+
 
 def main():
     args = parse_arguments()
@@ -389,7 +380,7 @@ def main():
     )
 
     basin = load_basin_geometry(project_root)
-    smoke_geometry = build_smoke_geometry()
+    smoke_point, smoke_geometry = build_smoke_geometry()
 
     print()
     print("Building LOCAL 20 m production stack for:", period_start)
@@ -446,40 +437,47 @@ def main():
         basin_geometry=smoke_geometry,
     )
 
-    max_conservation_error, conservation_pixels = (
-        get_max_conservation_error(
-            outputs["conservation_error"],
-            smoke_geometry,
-            context["modis_projection"],
-        )
-    )
-
-    support = get_support_summary(
+    parent_qa = get_parent_qa_at_point(
         outputs,
-        smoke_geometry,
+        smoke_point,
         context["modis_projection"],
     )
 
-    print()
-    print("=== LOCAL SPATIAL SUPPORT QA ===")
-    for key, value in support.items():
-        print(f"{key}: {value:.6f}")
+    conservation_error = parent_qa[
+        "abs_conservation_error_mm"
+    ]
 
     print()
-    print("=== LOCAL MODIS CONSERVATION ===")
-    print(
-        "Eligible MODIS pixels:",
-        conservation_pixels,
-    )
-    print(
-        "Maximum absolute error (mm/period):",
-        max_conservation_error,
-    )
+    print("=== ST01 PARENT SUPPORT QA ===")
+    for key in [
+        "optical_valid_fraction",
+        "s1_valid_fraction",
+        "model_stack_valid_fraction",
+        "fine_fill_fraction",
+        "eligible",
+    ]:
+        print(f"{key}: {parent_qa[key]:.6f}")
 
-    if max_conservation_error > CONSERVATION_MAX_ABS_TOLERANCE_MM:
+    if parent_qa["eligible"] != 1.0:
         raise RuntimeError(
-            "MODIS mass-conservation tolerance was not met in the local smoke window. "
-            "Do not export the ET product."
+            "The ST01 parent MODIS cell is not production-eligible."
+        )
+
+    print()
+    print("=== ST01 PARENT MODIS CONSERVATION ===")
+    print(
+        "Absolute error (mm/period):",
+        conservation_error,
+    )
+    print(
+        "Tolerance (mm/period):",
+        CONSERVATION_MAX_ABS_TOLERANCE_MM,
+    )
+
+    if conservation_error > CONSERVATION_MAX_ABS_TOLERANCE_MM:
+        raise RuntimeError(
+            "MODIS mass-conservation tolerance was not met "
+            "for the ST01 parent cell."
         )
 
     print("MODIS conservation: PASS")
