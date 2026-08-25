@@ -6,8 +6,9 @@ This is intentionally the only pre-production raster test. It verifies:
 2. Earth Engine and local sklearn predictions agree numerically;
 3. the 25-band spatial predictor stack uses the accepted definitions;
 4. Sentinel-2 and Sentinel-1 support are sufficient for the test period;
-5. the parent MODIS cell containing ST01 conserves ET after proportional reconciliation;
-6. optionally, one 20 m GeoTIFF is downloaded locally.
+5. DI and AOA can be calculated from the real 25-band predictor stack;
+6. the parent MODIS cell containing ST01 conserves ET after proportional reconciliation;
+7. optionally, one 20 m GeoTIFF is downloaded locally.
 """
 
 from __future__ import annotations
@@ -21,6 +22,10 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from et_downscaling.aoa import (
+    build_aoa_images,
+    load_aoa_spec,
+)
 from et_downscaling.config import ANALYSIS_CRS
 from et_downscaling.model_spec import (
     COMMON_MODEL_FEATURES,
@@ -93,6 +98,7 @@ def get_paths(project_root: Path) -> dict[str, Path]:
     )
     return {
         "model": model_directory / PRODUCTION_MODEL_FILENAME,
+        "aoa": model_directory / "aoa_spec.json",
         "training": model_directory / "kc_model_training_population_ge90.csv",
         "output": (
             project_root
@@ -223,6 +229,49 @@ def validate_ee_model_transfer(
     print("RF transfer: PASS")
 
 
+def get_aoa_qa_at_point(
+    aoa_outputs: dict[str, ee.Image],
+    point: ee.Geometry,
+    fine_projection: ee.Projection,
+) -> dict[str, float]:
+    """Evaluate DI and AOA at the deterministic ST01 smoke point."""
+    qa = (
+        aoa_outputs["di"]
+        .rename("DI")
+        .addBands(
+            aoa_outputs["aoa"]
+            .rename("AOA")
+        )
+    )
+
+    values = (
+        qa
+        .reduceRegion(
+            reducer=ee.Reducer.first(),
+            geometry=point,
+            crs=fine_projection,
+            scale=PREDICTION_SCALE_M,
+            maxPixels=100,
+        )
+        .getInfo()
+    )
+
+    if values.get("DI") is None:
+        raise RuntimeError(
+            "AOA DI is masked at the ST01 smoke point."
+        )
+
+    if values.get("AOA") is None:
+        raise RuntimeError(
+            "AOA classification is masked at the ST01 smoke point."
+        )
+
+    return {
+        "DI": float(values["DI"]),
+        "AOA": float(values["AOA"]),
+    }
+
+
 def get_parent_qa_at_point(
     outputs: dict[str, ee.Image],
     point: ee.Geometry,
@@ -342,6 +391,12 @@ def main():
     project_root = Path(__file__).resolve().parents[1]
     paths = get_paths(project_root)
 
+    if not paths["aoa"].is_file():
+        raise FileNotFoundError(
+            f"AOA specification not found: {paths['aoa']}\n"
+            "Run first: python scripts/train_s2_kc_models.py"
+        )
+
     if not paths["model"].is_file():
         raise FileNotFoundError(
             f"Production model not found: {paths['model']}\n"
@@ -413,12 +468,60 @@ def main():
             "smoke period before designing any fallback."
         )
 
+    aoa_specification = load_aoa_spec(
+        paths["aoa"]
+    )
+
     stack_band_names = context["stack"].bandNames().getInfo()
     if stack_band_names != list(COMMON_MODEL_FEATURES):
         raise RuntimeError(
             "Spatial predictor order differs from the fitted model schema.\n"
             f"Expected: {COMMON_MODEL_FEATURES}\nFound: {stack_band_names}"
         )
+
+    aoa_outputs = build_aoa_images(
+        model_stack=context["stack"],
+        specification=aoa_specification,
+    )
+
+    aoa_qa = get_aoa_qa_at_point(
+        aoa_outputs,
+        smoke_point,
+        context["fine_projection"],
+    )
+
+    di_value = aoa_qa["DI"]
+    aoa_value = int(aoa_qa["AOA"])
+    aoa_threshold = float(
+        aoa_specification["threshold"]
+    )
+
+    print()
+    print("=== ST01 AOA QA ===")
+    print("DI:", di_value)
+    print("AOA:", aoa_value)
+    print("Threshold:", aoa_threshold)
+
+    if not np.isfinite(di_value):
+        raise RuntimeError(
+            "ST01 DI is not finite."
+        )
+
+    if aoa_value not in {0, 1}:
+        raise RuntimeError(
+            "ST01 AOA classification is not binary."
+        )
+
+    expected_aoa = int(
+        di_value <= aoa_threshold
+    )
+
+    if aoa_value != expected_aoa:
+        raise RuntimeError(
+            "AOA classification is inconsistent with the DI threshold."
+        )
+
+    print("AOA calculation: PASS")
 
     kc_raw = (
         context["stack"]
