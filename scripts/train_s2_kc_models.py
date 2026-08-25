@@ -23,6 +23,10 @@ import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import GroupKFold
 
+from et_downscaling.aoa import (
+    build_aoa_spec,
+    save_aoa_spec,
+)
 from et_downscaling.model_spec import (
     CANDIDATE_COLUMN,
     COMMON_MODEL_FEATURES,
@@ -341,6 +345,7 @@ def main():
     common_model_path = output_directory / "rf_kc_s2_common_ge90.joblib"
     full_model_path = output_directory / "rf_kc_s2_full_ge90.joblib"
     production_model_path = output_directory / PRODUCTION_MODEL_FILENAME
+    aoa_spec_path = output_directory / "aoa_spec.json"
     metrics_path = output_directory / "kc_model_comparison_ge90.csv"
     folds_path = output_directory / "kc_model_spatial_folds_ge90.csv"
     oof_path = output_directory / "kc_model_oof_predictions_ge90.csv"
@@ -350,6 +355,16 @@ def main():
     joblib.dump(common_final_model, common_model_path)
     joblib.dump(full_final_model, full_model_path)
     joblib.dump(common_final_model, production_model_path)
+
+    aoa_specification = build_aoa_spec(
+        training=candidate,
+        model=common_final_model,
+        group_column="spatial_block",
+    )
+    save_aoa_spec(
+        aoa_specification,
+        aoa_spec_path,
+    )
 
     metrics.to_csv(metrics_path, index=False)
     fold_metrics.to_csv(folds_path, index=False)
@@ -392,6 +407,23 @@ def main():
         "n_full_s2_features": len(FULL_S2_MODEL_FEATURES),
         "selected_model": SELECTED_MODEL_NAME,
         "production_model_filename": PRODUCTION_MODEL_FILENAME,
+        "aoa": {
+            "specification_filename": "aoa_spec.json",
+            "method": aoa_specification["method"],
+            "threshold_method": aoa_specification["threshold_method"],
+            "threshold": aoa_specification["threshold"],
+            "cast_reference_threshold": aoa_specification[
+                "cast_reference_threshold"
+            ],
+            "mean_training_distance": aoa_specification[
+                "mean_training_distance"
+            ],
+            "training_rows": aoa_specification["training_rows"],
+            "spatial_groups": aoa_specification["spatial_groups"],
+            "outlier_count": aoa_specification[
+                "train_di_summary"
+            ]["outlier_count"],
+        },
         "selection_reason": (
             "The 25-feature common RF had slightly better aggregate spatial "
             "R2, RMSE, and KGE than the 31-feature S2 RF; the added S2-specific "
@@ -411,6 +443,7 @@ def main():
 
     print("\nSelected production model:", SELECTED_MODEL_NAME)
     print("Saved production RF:", production_model_path)
+    print("Saved AOA specification:", aoa_spec_path)
     print("Saved common RF:", common_model_path)
     print("Saved full S2 RF:", full_model_path)
     print("Saved comparison:", metrics_path)
