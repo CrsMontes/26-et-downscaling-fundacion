@@ -1,15 +1,12 @@
 # ET Downscaling — Fundación River Basin
 
-Reproducible workflow for estimating and downscaling MODIS evapotranspiration
-in the Fundación River Basin, Colombia, using Sentinel-2, Sentinel-1,
-ERA5-Land, and CHIRPS.
+Reproducible workflow for estimating and spatially downscaling MODIS evapotranspiration in the Fundación River Basin, Colombia, using Sentinel-2, Sentinel-1, ERA5-Land, and CHIRPS.
 
-The current production design was rebuilt after a methodological diagnostic of
-the original workflow. The active pipeline deliberately separates coarse-target
-training from fine-grid prediction to avoid pseudoreplication and false claims
-of 20 m validation.
+**Authors:** Cristian Montes-Chaura and Manuel Coy Pertuz.
 
-## Current production design
+The current workflow was rebuilt after a methodological diagnostic of the original implementation. Training is performed at MODIS support, while the 20 m grid is used only for spatial prediction. This avoids treating fine pixels as independent ET observations and prevents unsupported claims of validation at 20 m.
+
+## Methodological workflow
 
 ```text
 MODIS MOD16A2GF ET
@@ -18,74 +15,86 @@ Sentinel-2 predictors
 Sentinel-1 predictors
 ERA5-Land + CHIRPS
         ↓
-MODIS-footprint training table
+Station × MODIS footprint × MODIS period
         ↓
 Kc = ET_MODIS / ETo
         ↓
-Spatially blocked model validation
+Spatially blocked validation
         ↓
-Selected RF: 25 predictors
+Random Forest
+300 trees · 25 common predictors
         ↓
-Sentinel-2 20 m production grid
+Kc prediction on a 20 m grid
         ↓
-Fine Kc spatial pattern
+Fine-scale ET spatial pattern
         ↓
-MODIS-constrained ET product
+3-pass MODIS reconciliation
+        ↓
+DI / AOA / eligible
+        ↓
+Optional 4-band GeoTIFF
 ```
 
-### Spatial support
+## Spatial and temporal support
 
-- MODIS ET is the coarse target.
-- One training observation is one station × one MODIS footprint × one MODIS
-  period.
-- Fine optical/radar pixels inside a MODIS footprint are not treated as
-  independent ET observations.
-- Sentinel-2 uses a 20 m working and prediction grid.
-- Sentinel-1 is temporally composited first and summarized at 10 m only when
-  producing footprint-scale training statistics; 10 m is not an ET validation
-  resolution.
-- Meteorological variables retain coarse atmospheric support.
+* MODIS MOD16A2GF v6.1 ET is the coarse target.
+* One training observation represents one station × one MODIS footprint × one MODIS period.
+* Fine Sentinel-2 and Sentinel-1 pixels are not treated as independent ET observations.
+* Sentinel-2 defines the 20 m production grid.
+* Sentinel-1 R077 ascending observations provide VV, VH, and VV−VH spatial predictors.
+* ERA5-Land and CHIRPS retain their coarse atmospheric support.
+* Each output map represents accumulated ET for one MODIS composite, normally 8 days.
+* The 20 m grid is a prediction scale, not an independently validated ET observation scale.
 
-## Accepted primary configuration
+## Production configuration
 
-| Component | Current choice |
-|---|---|
-| ET target | `MODIS/061/MOD16A2GF` |
-| Target variable | `Kc_target = ET_MODIS / ETo` |
-| Primary optical source | Sentinel-2 SR Harmonized |
-| S2 cloud QA | Cloud Score+ `cs_cdf >= 0.60` |
-| Prediction grid | 20 m |
-| Sentinel-1 | relative orbit 77, ascending |
-| Radar temporal composite | median |
-| Meteorology | ERA5-Land + CHIRPS |
-| Final model | Random Forest, 25 predictors |
-| Primary validation | ~10 km spatial blocks |
-| Basin boundary | `data/boundaries/fundacion_basin.geojson` |
+| Component              | Current choice                          |
+| ---------------------- | --------------------------------------- |
+| ET target              | `MODIS/061/MOD16A2GF`                   |
+| Target variable        | `Kc_target = ET_MODIS / ETo`            |
+| Optical source         | Sentinel-2 SR Harmonized                |
+| S2 cloud QA            | Cloud Score+ `cs_cdf >= 0.60`           |
+| Production grid        | 20 m                                    |
+| Sentinel-1             | relative orbit 77, ascending            |
+| Radar composite        | median                                  |
+| Meteorology            | ERA5-Land + CHIRPS                      |
+| Final model            | Random Forest, 300 trees, 25 predictors |
+| Primary validation     | spatial blocks (~10 km)                 |
+| MODIS reconciliation   | 3 passes                                |
+| Conservation tolerance | 0.01 mm per MODIS period                |
 
-Combined HLS S30 + L30 remains an operational 30 m alternative, but it is not
-the selected primary production source.
+## Model performance
 
-## Final model selection
+The final Sentinel-2 training population contains 349 station-period observations with optical coverage ≥ 90%.
 
-The final Sentinel-2 training population contains 349 station-period
-observations at optical coverage >= 90%.
+Spatial validation:
 
-Spatial validation produced:
+| Model                     |   n |     R² |  RMSE |   MAE |   Bias |    KGE |
+| ------------------------- | --: | -----: | ----: | ----: | -----: | -----: |
+| RF common, 25 predictors  | 349 |  0.235 | 0.285 | 0.213 | -0.017 |  0.250 |
+| RF S2 full, 31 predictors | 349 |  0.217 | 0.289 | 0.214 | -0.029 |  0.231 |
+| Global mean               | 349 | -0.138 | 0.348 | 0.264 | -0.010 | -0.686 |
+| MODIS persistence         | 349 |  0.463 | 0.239 | 0.154 |  0.011 |  0.724 |
 
-| Model | R2 | RMSE | MAE | KGE |
-|---|---:|---:|---:|---:|
-| RF common, 25 predictors | 0.233 | 0.286 | 0.214 | 0.250 |
-| RF S2 full, 31 predictors | 0.225 | 0.287 | 0.213 | 0.238 |
-| MODIS persistence baseline | 0.463 | 0.239 | 0.154 | 0.724 |
+The 25-predictor RF was retained as the production model to generate predictor-conditioned subpixel spatial variability with a parsimonious predictor set.
 
-The 25-predictor RF is selected for parsimony. The stronger persistence
-baseline is retained as an important limitation: coarse temporal persistence is
-more predictive than the RF, but it does not provide subpixel spatial
-information.
+The stronger MODIS persistence baseline is an important limitation: temporal persistence predicts the coarse-scale target better under spatial validation, but it cannot generate spatial variability within a MODIS footprint.
 
-See `docs/decisions/11_final_kc_model.md` for the full decision record.
+Field comparisons are diagnostic and do not constitute independent validation of true ET at 20 m.
 
-## Reproducible execution to the current checkpoint
+## Area of applicability
+
+Prediction support is evaluated using predictor-space distance and an Area of Applicability (AOA).
+
+Production outputs distinguish:
+
+* `eligible = 0`: required prediction support is unavailable.
+* `eligible = 1`, `AOA = 0`: prediction is outside the represented predictor domain.
+* `eligible = 1`, `AOA = 1`: prediction is inside the represented predictor domain.
+
+AOA describes model applicability, not prediction accuracy.
+
+## Reproducible execution
 
 Create the environment and install the package:
 
@@ -101,63 +110,81 @@ Authenticate Earth Engine:
 earthengine authenticate
 ```
 
-Export reusable meteorological inputs:
+Run or resume the complete accepted workflow:
 
 ```bash
-python scripts/export_meteorology_data.py
+python scripts/run_pipeline.py --project <EE_PROJECT_ID>
 ```
 
-Export Sentinel-2 + Sentinel-1 footprint predictors:
+The pipeline reuses existing raw exports, training products, fitted models, validation results, and QA outputs when available.
+
+Useful options:
 
 ```bash
-python scripts/export_satellite_data.py --optical-source S2
+python scripts/run_pipeline.py --project <EE_PROJECT_ID> --no-map
+python scripts/run_pipeline.py --project <EE_PROJECT_ID> --rebuild-model
+python scripts/run_pipeline.py --project <EE_PROJECT_ID> --rebuild-all
 ```
 
-Build the local training master:
+A single MODIS-period product can also be evaluated or exported directly after the production model has been generated:
 
 ```bash
-python scripts/build_training_dataset.py --optical-source S2
+python scripts/run_et_prediction.py \
+    --project <EE_PROJECT_ID> \
+    --period-start YYYY-MM-DD \
+    --export
 ```
 
-Train and validate the candidate models and write the selected production RF:
+The requested date must correspond to an available MODIS period start. A period without the required Sentinel-1 R077 ascending acquisition is rejected; no silent fallback is applied.
 
-```bash
-python scripts/train_s2_kc_models.py
+The optional GeoTIFF contains four bands:
+
+```text
+ET_mm_period
+DI
+AOA
+eligible
 ```
 
-Generated data and fitted models are written under `outputs/`, which is ignored
-by Git because the files are reproducible and can be large.
+Generated data, fitted models, validation outputs, and exported products are written under `outputs/`, which is excluded from Git because these files are reproducible and may be large.
 
-## Project structure
+## Key project structure
 
 ```text
 26-et-downscaling-fundacion/
 ├── config/
 │   └── fvc_endmembers.json
 ├── data/
-│   └── boundaries/
-│       └── fundacion_basin.geojson
+│   ├── boundaries/
+│   │   └── fundacion_basin.geojson
+│   ├── stations/
+│   │   └── fundacion_stations.geojson
+│   └── field/
+│       └── field_etgage.csv
 ├── docs/
 │   └── decisions/
 ├── scripts/
-│   ├── build_training_dataset.py
 │   ├── export_meteorology_data.py
 │   ├── export_satellite_data.py
-│   ├── recalibrate_hls_fvc.py
-│   └── train_s2_kc_models.py
+│   ├── build_training_dataset.py
+│   ├── train_s2_kc_models.py
+│   ├── analyze_field_diagnostics.py
+│   ├── validate_field_downscaling.py
+│   ├── smoke_test_spatial_prediction.py
+│   ├── run_et_prediction.py
+│   └── run_pipeline.py
 ├── src/
 │   └── et_downscaling/
 │       ├── config.py
 │       ├── dataset.py
-│       ├── hls.py
-│       ├── local_training.py
-│       ├── meteorology_export.py
 │       ├── model_spec.py
+│       ├── model_transfer.py
+│       ├── production.py
+│       ├── aoa.py
 │       ├── modis.py
-│       ├── optical.py
-│       ├── reference_et_local.py
 │       ├── sentinel1.py
-│       └── sentinel2.py
+│       ├── sentinel2.py
+│       └── reference_et_local.py
 ├── environment.yml
 ├── pyproject.toml
 └── README.md
@@ -165,14 +192,9 @@ by Git because the files are reproducible and can be large.
 
 ## Methodological decision records
 
-The `docs/decisions/` directory records changes relative to the historical
-workflow. Important corrections include MODIS QC handling, S2/HLS source
-selection, the Kc target, Sentinel-1 orbit selection, spatial support,
-local meteorological processing, HLS FVC recalibration, and final model
-selection.
+The `docs/decisions/` directory documents the main methodological changes and their justification, including MODIS QC, optical-source selection, the Kc target, Sentinel-1 configuration, spatial support, meteorological processing, FVC calibration, thermal predictors, model selection, and other diagnostic decisions.
 
-Historical diagnostic code and removed experimental modules remain recoverable
-through Git history rather than being kept in the active production source tree.
+Historical implementations and removed experiments remain recoverable through Git history rather than being retained in the active production workflow.
 
 ## License
 
