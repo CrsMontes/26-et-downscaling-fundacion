@@ -30,6 +30,13 @@ One candidate observation has missing source `ET_QC`; it is retained because
 
 Final candidate population: **349 station-period observations**.
 
+The final population is selected with
+`training_candidate_source_ge_90`, not the common-only candidate flag. This
+keeps the common and S2-full RF comparison on exactly the same complete
+population, including availability of the six S2-specific candidate
+variables. Changing that population would require a new controlled model
+comparison and retraining.
+
 ## Result
 
 | Model | R2 | RMSE | MAE | Bias | KGE |

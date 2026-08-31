@@ -33,7 +33,7 @@ HLS combined:
 Neither source consistently dominated all predictive metrics.
 
 ## Decision
-Keep both optical sources operational.
+Keep both optical sources available for extraction and controlled comparison.
 
 Default:
 - S2
@@ -42,6 +42,13 @@ Default:
 Alternative:
 - HLS_COMBINED (S30 + L30)
 - working grid: 30 m
+
+The definitive 2021–2023 production branch is Sentinel-2. HLS has implemented
+extraction, preprocessing, FVC calibration, and training-master construction,
+but it does not have a closed final-model training, AOA, smoke-test, and map
+production path equivalent to the Sentinel-2 branch. It must therefore be
+described as an operational diagnostic alternative, not as a second complete
+production pipeline.
 
 The optical source must be selected explicitly by configuration or command-line argument.
 

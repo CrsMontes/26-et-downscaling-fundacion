@@ -1,0 +1,15 @@
+name: et-fundacion
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.12.13
+  - earthengine-api=1.7.38
+  - numpy=2.5.2
+  - pandas=3.0.5
+  - scikit-learn=1.9.0
+  - joblib=1.5.3
+  - matplotlib=3.11.1
+  - ipykernel=7.3.0
+  - pip

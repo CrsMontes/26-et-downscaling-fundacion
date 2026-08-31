@@ -14,6 +14,8 @@ This is intentionally the only pre-production raster test. It verifies:
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
+import json
 from pathlib import Path
 from urllib.request import urlretrieve
 
@@ -106,6 +108,13 @@ def get_paths(project_root: Path) -> dict[str, Path]:
             / "processed"
             / "predictions"
             / "S2"
+        ),
+        "qa": (
+            project_root
+            / "outputs"
+            / "processed"
+            / "qa"
+            / "spatial_smoke_test.json"
         ),
     }
 
@@ -416,7 +425,7 @@ def main():
 
     period_start = args.period_start or select_smoke_period(training)
 
-    initialize_earth_engine(args.project)
+    project_id = initialize_earth_engine(args.project)
 
     print()
     print("Transferring production RF to Earth Engine...")
@@ -601,6 +610,32 @@ def main():
     print("Period:", period_start)
     print("Production grid (m):", PREDICTION_SCALE_M)
     print("Production model trees:", len(tree_strings))
+
+    qa_record = {
+        "status": "PASS",
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "earth_engine_project": project_id,
+        "period_start": period_start,
+        "station_id": SMOKE_STATION_ID,
+        "prediction_scale_m": PREDICTION_SCALE_M,
+        "rf_trees": len(tree_strings),
+        "transfer_max_abs_tolerance": TRANSFER_MAX_ABS_TOLERANCE,
+        "transfer_rmse_tolerance": TRANSFER_RMSE_TOLERANCE,
+        "conservation_error_mm": conservation_error,
+        "conservation_tolerance_mm": CONSERVATION_MAX_ABS_TOLERANCE_MM,
+        "di": di_value,
+        "aoa": aoa_value,
+        "aoa_threshold": aoa_threshold,
+        "optical_valid_fraction": parent_qa["optical_valid_fraction"],
+        "s1_valid_fraction": parent_qa["s1_valid_fraction"],
+        "model_stack_valid_fraction": parent_qa["model_stack_valid_fraction"],
+        "fine_fill_fraction": parent_qa["fine_fill_fraction"],
+        "eligible": parent_qa["eligible"],
+    }
+    paths["qa"].parent.mkdir(parents=True, exist_ok=True)
+    with paths["qa"].open("w", encoding="utf-8") as file:
+        json.dump(qa_record, file, indent=2)
+    print("Saved QA record:", paths["qa"])
 
 
 if __name__ == "__main__":

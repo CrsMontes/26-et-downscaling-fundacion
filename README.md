@@ -78,6 +78,17 @@ Spatial validation:
 
 The 25-predictor RF was retained as the production model to generate predictor-conditioned subpixel spatial variability with a parsimonious predictor set.
 
+In production, `Kc_raw` supplies relative subpixel weights. The current map is
+not calculated by simply multiplying a 20 m Kc field by ETo. For every eligible
+MODIS parent, the initial reconstruction is:
+
+```text
+ET_fine,i = Kc_filled,i * ET_MODIS / mean_parent(Kc_filled)
+```
+
+Three proportional passes then reconcile the non-nested MODIS and UTM grids.
+ETo defines the training target; MODIS fixes the final coarse ET magnitude.
+
 The stronger MODIS persistence baseline is an important limitation: temporal persistence predicts the coarse-scale target better under spatial validation, but it cannot generate spatial variability within a MODIS footprint.
 
 Field comparisons are diagnostic and do not constitute independent validation of true ET at 20 m.
@@ -99,7 +110,7 @@ AOA describes model applicability, not prediction accuracy.
 Create the environment and install the package:
 
 ```bash
-conda env create -f environment.yml
+conda env create -f environment-lock.yml
 conda activate et-fundacion
 pip install -e .
 ```
@@ -117,6 +128,25 @@ python scripts/run_pipeline.py --project <EE_PROJECT_ID>
 ```
 
 The pipeline reuses existing raw exports, training products, fitted models, validation results, and QA outputs when available.
+
+The exact stage order, required artifact contract, expected row counts, and
+rebuild semantics are documented in [`docs/WORKFLOW_2021_2023.md`](docs/WORKFLOW_2021_2023.md).
+The derived-artifact retention and reproducibility classification is recorded
+in [`docs/ARTIFACT_INVENTORY_2021_2023.md`](docs/ARTIFACT_INVENTORY_2021_2023.md).
+
+After a complete run, verify every local checkpoint without contacting Earth
+Engine:
+
+```bash
+python scripts/audit_reproducibility.py --strict
+```
+
+The accepted QA sequence includes a bounded native-MODIS test of real fine
+fill and conservation across multiple parents:
+
+```bash
+python scripts/qa_conservative_reconciliation.py --project <EE_PROJECT_ID>
+```
 
 Useful options:
 

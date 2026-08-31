@@ -8,10 +8,12 @@ pipeline is ready, the user may generate one or more 8-day ET products.
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 from pathlib import Path
 
+import et_downscaling
 import pandas as pd
 
 from et_downscaling.aoa import load_aoa_spec
@@ -21,6 +23,25 @@ from et_downscaling.production import (
     MODIS_RECONCILIATION_PASSES,
     PREDICTION_SCALE_M,
 )
+
+
+OPTIONAL_OUTPUT_KEYS = {
+    "field_checkpoint",
+    "field_figure_01",
+    "field_figure_02",
+    "field_figure_03",
+    "field_figure_04",
+    "field_figure_05",
+    "field_figure_06",
+    "field_figure_07",
+    "field_figure_08",
+    "field_figure_09",
+}
+
+QA_OUTPUT_KEYS = {
+    "smoke_qa",
+    "conservative_qa",
+}
 
 
 def parse_arguments():
@@ -58,6 +79,37 @@ def get_project_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def validate_imported_package_root(project_root: Path) -> Path:
+    """Fail before pipeline work if the editable package belongs elsewhere."""
+    expected_package_root = (
+        Path(project_root).resolve()
+        / "src"
+        / "et_downscaling"
+    ).resolve()
+    imported_file_value = getattr(et_downscaling, "__file__", None)
+
+    if not imported_file_value:
+        raise RuntimeError(
+            "Cannot determine the imported et_downscaling package path.\n"
+            f"Expected package root: {expected_package_root}\n"
+            "Reinstall this working copy with: python -m pip install -e ."
+        )
+
+    imported_file = Path(imported_file_value).resolve()
+    try:
+        imported_file.relative_to(expected_package_root)
+    except ValueError:
+        raise RuntimeError(
+            "Imported et_downscaling belongs to a different repository.\n"
+            f"Expected package root: {expected_package_root}\n"
+            f"Actually imported from: {imported_file}\n"
+            "No pipeline work was started. Reinstall this working copy with: "
+            "python -m pip install -e ."
+        ) from None
+
+    return imported_file
+
+
 def resolve_project_id(project_id: str | None) -> str:
     value = project_id.strip() if project_id else ""
     if not value:
@@ -82,11 +134,62 @@ def get_paths(project_root: Path) -> dict[str, Path]:
         / "field_validation"
         / "tables"
     )
+    field_figures = field_tables.parent / "figures"
     return {
         "model": model_directory / "rf_kc_s2_production_ge90.joblib",
+        "common_model": model_directory / "rf_kc_s2_common_ge90.joblib",
+        "full_model": model_directory / "rf_kc_s2_full_ge90.joblib",
         "aoa": model_directory / "aoa_spec.json",
+        "training_population": (
+            model_directory / "kc_model_training_population_ge90.csv"
+        ),
         "model_metrics": model_directory / "kc_model_comparison_ge90.csv",
+        "fold_metrics": model_directory / "kc_model_spatial_folds_ge90.csv",
+        "oof_predictions": (
+            model_directory / "kc_model_oof_predictions_ge90.csv"
+        ),
+        "model_metadata": model_directory / "kc_model_comparison_ge90.json",
+        "field_daily_qc": field_tables / "field_daily_qc.csv",
+        "field_scale_factor": field_tables / "field_scale_factor.csv",
+        "field_reference_eto": field_tables / "field_reference_eto_check.csv",
+        "field_pairs_diagnostic": (
+            field_tables / "field_modis_period_pairs_diagnostic_reproduction.csv"
+        ),
+        "field_current_oof": field_tables / "field_current_oof_comparison.csv",
+        "field_current_metrics": field_tables / "field_current_oof_metrics.csv",
+        "field_uncertainty": field_tables / "field_instrument_uncertainty.csv",
+        "field_checkpoint": (
+            field_tables / "field_oof_downscaling_checkpoint.csv"
+        ),
+        "field_pairs_20m": field_tables / "field_oof_downscaled_20m_pairs.csv",
         "field_metrics": field_tables / "field_oof_downscaled_20m_metrics.csv",
+        "field_by_station": (
+            field_tables / "field_oof_downscaled_20m_by_station.csv"
+        ),
+        "field_figure_01": field_figures / "FD01_daily_raw_qc.png",
+        "field_figure_02": field_figures / "FD02_scale_factor.png",
+        "field_figure_03": field_figures / "FD03_reference_eto_check.png",
+        "field_figure_04": field_figures / "FD04_field_vs_modis_scatter.png",
+        "field_figure_05": field_figures / "FD05_field_vs_modis_series.png",
+        "field_figure_06": field_figures / "FD06_current_oof_vs_field.png",
+        "field_figure_07": field_figures / "FD07_instrument_uncertainty.png",
+        "field_figure_08": field_figures / "FD08_oof_downscaling_vs_field.png",
+        "field_figure_09": field_figures / "FD09_oof_downscaled_series.png",
+        "smoke_qa": (
+            project_root
+            / "outputs"
+            / "processed"
+            / "qa"
+            / "spatial_smoke_test.json"
+        ),
+        "conservative_qa": (
+            project_root
+            / "outputs"
+            / "processed"
+            / "qa"
+            / "conservative_reconciliation"
+            / "conservative_reconciliation_20220525.json"
+        ),
     }
 
 
@@ -127,7 +230,19 @@ def run_script(
 
 
 def final_outputs_ready(paths: dict[str, Path]) -> bool:
-    return all(path.is_file() for path in paths.values())
+    return all(
+        path.is_file()
+        for key, path in paths.items()
+        if key not in OPTIONAL_OUTPUT_KEYS
+    )
+
+
+def analysis_outputs_ready(paths: dict[str, Path]) -> bool:
+    return all(
+        path.is_file()
+        for key, path in paths.items()
+        if key not in OPTIONAL_OUTPUT_KEYS | QA_OUTPUT_KEYS
+    )
 
 
 def build_or_reuse(
@@ -162,7 +277,7 @@ def build_or_reuse(
     rebuild_analysis = (
         args.rebuild_all
         or args.rebuild_model
-        or not final_outputs_ready(paths)
+        or not analysis_outputs_ready(paths)
     )
 
     if not rebuild_analysis:
@@ -173,32 +288,58 @@ def build_or_reuse(
             "Use --rebuild-model after an intentional model-method change, "
             "or --rebuild-all after an intentional raw-extraction change."
         )
-        return
+    else:
+        print()
+        print("=== TRAINING / VALIDATION ===")
+        run_script(
+            project_root,
+            "build_training_dataset.py",
+            ["--optical-source", "S2"],
+        )
+        run_script(project_root, "train_s2_kc_models.py")
+        run_script(project_root, "analyze_field_diagnostics.py")
 
-    print()
-    print("=== TRAINING / VALIDATION ===")
-    run_script(
-        project_root,
-        "build_training_dataset.py",
-        ["--optical-source", "S2"],
-    )
-    run_script(project_root, "train_s2_kc_models.py")
-    run_script(project_root, "analyze_field_diagnostics.py")
+        validation_args = ["--project", project_id]
+        if args.rebuild_all:
+            validation_args.append("--restart")
 
-    validation_args = ["--project", project_id]
-    if args.rebuild_all:
-        validation_args.append("--restart")
+        run_script(
+            project_root,
+            "validate_field_downscaling.py",
+            validation_args,
+        )
 
-    run_script(
-        project_root,
-        "validate_field_downscaling.py",
-        validation_args,
+    rebuild_smoke = (
+        args.rebuild_all
+        or args.rebuild_model
+        or not paths["smoke_qa"].is_file()
     )
-    run_script(
-        project_root,
-        "smoke_test_spatial_prediction.py",
-        ["--project", project_id],
+    if rebuild_smoke:
+        print()
+        print("=== SPATIAL PRODUCTION QA ===")
+        run_script(
+            project_root,
+            "smoke_test_spatial_prediction.py",
+            ["--project", project_id],
+        )
+    else:
+        print("Existing spatial smoke-test QA: REUSED.")
+
+    rebuild_conservative_qa = (
+        args.rebuild_all
+        or args.rebuild_model
+        or not paths["conservative_qa"].is_file()
     )
+    if rebuild_conservative_qa:
+        print()
+        print("=== CONSERVATIVE RECONCILIATION QA ===")
+        run_script(
+            project_root,
+            "qa_conservative_reconciliation.py",
+            ["--project", project_id],
+        )
+    else:
+        print("Existing conservative-reconciliation QA: REUSED.")
 
 
 def print_summary(paths: dict[str, Path]) -> None:
@@ -210,6 +351,14 @@ def print_summary(paths: dict[str, Path]) -> None:
     metrics = pd.read_csv(paths["model_metrics"])
     aoa = load_aoa_spec(paths["aoa"])
     field = pd.read_csv(paths["field_metrics"])
+    with paths["smoke_qa"].open("r", encoding="utf-8") as file:
+        smoke_qa = json.load(file)
+    if smoke_qa.get("status") != "PASS":
+        raise RuntimeError("Spatial smoke-test QA record is not PASS.")
+    with paths["conservative_qa"].open("r", encoding="utf-8") as file:
+        conservative_qa = json.load(file)
+    if conservative_qa.get("status") != "PASS":
+        raise RuntimeError("Conservative-reconciliation QA record is not PASS.")
 
     print()
     print("=" * 72)
@@ -248,7 +397,21 @@ def print_summary(paths: dict[str, Path]) -> None:
         "MODIS conservation tolerance (mm/period):",
         MODIS_CONSERVATION_TOLERANCE_MM,
     )
-    print("Smoke test: PASS")
+    print("Smoke test:", smoke_qa["status"])
+    print("Smoke period:", smoke_qa["period_start"])
+    print("Smoke conservation error (mm/period):", smoke_qa["conservation_error_mm"])
+    print(
+        "Multi-parent conservation parents:",
+        conservative_qa["multi_parent_conservation"]["eligible_parent_count"],
+    )
+    print(
+        "Multi-parent maximum error (mm/period):",
+        conservative_qa["multi_parent_conservation"]["maximum_abs_error_mm"],
+    )
+    print(
+        "Fine-fill QA:",
+        conservative_qa["fine_fill"]["status"],
+    )
 
 
 def ask_yes_no(prompt: str, default: bool = False) -> bool:
@@ -321,6 +484,7 @@ def map_loop(
 def main():
     args = parse_arguments()
     project_root = get_project_root()
+    validate_imported_package_root(project_root)
     require_canonical_inputs(project_root)
     project_id = resolve_project_id(args.project)
     paths = get_paths(project_root)
