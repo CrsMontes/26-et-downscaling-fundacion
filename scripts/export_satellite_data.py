@@ -28,6 +28,7 @@ from et_downscaling.export import (
 from et_downscaling.modis import (
     build_modis_inputs,
 )
+from et_downscaling.period import expected_observation_count
 from et_downscaling.optical import (
     get_optical_collection,
 )
@@ -627,6 +628,11 @@ def main():
         .getInfo()
     )
 
+    number_periods = int(
+        ee.ImageCollection(modis_inputs["collection"]).size().getInfo()
+    )
+    expected_rows = expected_observation_count(number_periods, len(station_ids))
+
     years = (
         get_processing_years()
     )
@@ -923,14 +929,13 @@ def main():
             f"footprint={footprint_rows}"
         )
 
-    # Current design:
-    # 5 stations x 138 MODIS periods = 690 observations.
-    #
-    # Do not silently accept incomplete output.
-    if total_rows != 690:
+    # Do not silently accept incomplete output. Derive the expectation from
+    # the configured MODIS collection and station supports.
+    if total_rows != expected_rows:
         raise RuntimeError(
             "Unexpected satellite master row count: "
-            f"{total_rows}. Expected 690."
+            f"{total_rows}. Expected {expected_rows} "
+            f"({number_periods} periods x {len(station_ids)} supports)."
         )
 
     # ========================================================

@@ -16,7 +16,8 @@ import ee
 import joblib
 
 from et_downscaling.aoa import build_aoa_images, load_aoa_spec
-from et_downscaling.config import ANALYSIS_CRS, END_DATE, START_DATE
+from et_downscaling.config import ANALYSIS_CRS, ANALYSIS_PERIOD, END_DATE, START_DATE
+from et_downscaling.period import require_matching_period_metadata
 from et_downscaling.model_spec import (
     COMMON_MODEL_FEATURES,
     PRODUCTION_MODEL_FILENAME,
@@ -60,10 +61,12 @@ def get_paths(project_root: Path) -> dict[str, Path]:
         / "processed"
         / "models"
         / "S2"
+        / ANALYSIS_PERIOD.label
     )
     return {
         "model": model_directory / PRODUCTION_MODEL_FILENAME,
         "aoa": model_directory / "aoa_spec.json",
+        "metadata": model_directory / "kc_model_comparison_ge90.json",
     }
 
 
@@ -79,6 +82,7 @@ def require_files(paths: dict[str, Path]) -> None:
             + "\n".join(missing)
             + "\nRun scripts/run_pipeline.py first."
         )
+    require_matching_period_metadata(paths["metadata"], ANALYSIS_PERIOD)
 
 
 def calculate_screening(

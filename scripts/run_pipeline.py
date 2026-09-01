@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -23,6 +24,7 @@ from et_downscaling.production import (
     MODIS_RECONCILIATION_PASSES,
     PREDICTION_SCALE_M,
 )
+from et_downscaling.period import AnalysisPeriod, require_matching_period_metadata
 
 
 OPTIONAL_OUTPUT_KEYS = {
@@ -72,6 +74,8 @@ def parse_arguments():
         "--drive-folder",
         default="ET_Fundacion",
     )
+    parser.add_argument("--start-date", default="2021-01-01")
+    parser.add_argument("--end-date-exclusive", default="2024-01-01")
     return parser.parse_args()
 
 
@@ -119,19 +123,21 @@ def resolve_project_id(project_id: str | None) -> str:
     return value
 
 
-def get_paths(project_root: Path) -> dict[str, Path]:
+def get_paths(project_root: Path, period: AnalysisPeriod) -> dict[str, Path]:
     model_directory = (
         project_root
         / "outputs"
         / "processed"
         / "models"
         / "S2"
+        / period.label
     )
     field_tables = (
         project_root
         / "outputs"
         / "processed"
         / "field_validation"
+        / period.label
         / "tables"
     )
     field_figures = field_tables.parent / "figures"
@@ -180,6 +186,7 @@ def get_paths(project_root: Path) -> dict[str, Path]:
             / "outputs"
             / "processed"
             / "qa"
+            / period.label
             / "spatial_smoke_test.json"
         ),
         "conservative_qa": (
@@ -187,8 +194,9 @@ def get_paths(project_root: Path) -> dict[str, Path]:
             / "outputs"
             / "processed"
             / "qa"
+            / period.label
             / "conservative_reconciliation"
-            / "conservative_reconciliation_20220525.json"
+            / "conservative_reconciliation.json"
         ),
     }
 
@@ -211,6 +219,7 @@ def run_script(
     script_name: str,
     arguments: list[str] | None = None,
     stdin_text: str | None = None,
+    period: AnalysisPeriod | None = None,
 ) -> None:
     arguments = arguments or []
     command = [
@@ -220,12 +229,17 @@ def run_script(
     ]
     print()
     print(">", " ".join(command))
+    environment = os.environ.copy()
+    if period is not None:
+        environment["ET_START_DATE"] = period.start_date.isoformat()
+        environment["ET_END_DATE_EXCLUSIVE"] = period.end_date_exclusive.isoformat()
     subprocess.run(
         command,
         cwd=project_root,
         check=True,
         text=True,
         input=stdin_text,
+        env=environment,
     )
 
 
@@ -250,6 +264,7 @@ def build_or_reuse(
     project_id: str,
     args,
     paths: dict[str, Path],
+    period: AnalysisPeriod,
 ) -> None:
     project_input = project_id + "\n"
 
@@ -266,12 +281,14 @@ def build_or_reuse(
         "export_meteorology_data.py",
         meteorology_args,
         stdin_text=project_input,
+        period=period,
     )
     run_script(
         project_root,
         "export_satellite_data.py",
         satellite_args,
         stdin_text=project_input,
+        period=period,
     )
 
     rebuild_analysis = (
@@ -281,6 +298,7 @@ def build_or_reuse(
     )
 
     if not rebuild_analysis:
+        require_matching_period_metadata(paths["model_metadata"], period)
         print()
         print("=== TRAINING / VALIDATION ===")
         print("Existing accepted outputs: REUSED.")
@@ -295,9 +313,10 @@ def build_or_reuse(
             project_root,
             "build_training_dataset.py",
             ["--optical-source", "S2"],
+            period=period,
         )
-        run_script(project_root, "train_s2_kc_models.py")
-        run_script(project_root, "analyze_field_diagnostics.py")
+        run_script(project_root, "train_s2_kc_models.py", period=period)
+        run_script(project_root, "analyze_field_diagnostics.py", period=period)
 
         validation_args = ["--project", project_id]
         if args.rebuild_all:
@@ -307,6 +326,7 @@ def build_or_reuse(
             project_root,
             "validate_field_downscaling.py",
             validation_args,
+            period=period,
         )
 
     rebuild_smoke = (
@@ -321,8 +341,10 @@ def build_or_reuse(
             project_root,
             "smoke_test_spatial_prediction.py",
             ["--project", project_id],
+            period=period,
         )
     else:
+        require_matching_period_metadata(paths["smoke_qa"], period)
         print("Existing spatial smoke-test QA: REUSED.")
 
     rebuild_conservative_qa = (
@@ -337,8 +359,10 @@ def build_or_reuse(
             project_root,
             "qa_conservative_reconciliation.py",
             ["--project", project_id],
+            period=period,
         )
     else:
+        require_matching_period_metadata(paths["conservative_qa"], period)
         print("Existing conservative-reconciliation QA: REUSED.")
 
 
@@ -426,6 +450,7 @@ def map_loop(
     project_root: Path,
     project_id: str,
     drive_folder: str,
+    period: AnalysisPeriod,
 ) -> None:
     """Interactively evaluate or export one or more 8-day ET products."""
 
@@ -466,6 +491,7 @@ def map_loop(
                 project_root,
                 "run_et_prediction.py",
                 arguments,
+                period=period,
             )
         except subprocess.CalledProcessError:
             print()
@@ -483,11 +509,12 @@ def map_loop(
 
 def main():
     args = parse_arguments()
+    period = AnalysisPeriod.from_strings(args.start_date, args.end_date_exclusive)
     project_root = get_project_root()
     validate_imported_package_root(project_root)
     require_canonical_inputs(project_root)
     project_id = resolve_project_id(args.project)
-    paths = get_paths(project_root)
+    paths = get_paths(project_root, period)
 
     print()
     print("=" * 72)
@@ -495,12 +522,15 @@ def main():
     print("=" * 72)
     print("Project root:", project_root)
     print("Earth Engine project:", project_id)
+    print("Analysis period:", period.start_date, "to", period.end_date_exclusive, "(exclusive)")
+    print("Period label:", period.label)
 
     build_or_reuse(
         project_root,
         project_id,
         args,
         paths,
+        period,
     )
     print_summary(paths)
 
@@ -509,6 +539,7 @@ def main():
             project_root,
             project_id,
             args.drive_folder,
+            period,
         )
 
     print()

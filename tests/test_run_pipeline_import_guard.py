@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
-import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -23,18 +22,17 @@ class ImportedPackageRootGuardTest(unittest.TestCase):
         self.assertTrue(imported_file.is_relative_to(expected_root))
 
     def test_rejects_package_from_different_repository(self):
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            wrong_file = (
-                Path(temporary_directory)
-                / "other_repository"
-                / "src"
-                / "et_downscaling"
-                / "__init__.py"
-            ).resolve()
+        wrong_file = (
+            PROJECT_ROOT.parent
+            / "other_repository"
+            / "src"
+            / "et_downscaling"
+            / "__init__.py"
+        ).resolve()
 
-            with patch.object(run_pipeline.et_downscaling, "__file__", str(wrong_file)):
-                with self.assertRaises(RuntimeError) as context:
-                    run_pipeline.validate_imported_package_root(PROJECT_ROOT)
+        with patch.object(run_pipeline.et_downscaling, "__file__", str(wrong_file)):
+            with self.assertRaises(RuntimeError) as context:
+                run_pipeline.validate_imported_package_root(PROJECT_ROOT)
 
         message = str(context.exception)
         self.assertIn("different repository", message)

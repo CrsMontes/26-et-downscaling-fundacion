@@ -27,6 +27,7 @@ from et_downscaling.aoa import (
     build_aoa_spec,
     save_aoa_spec,
 )
+from et_downscaling.config import ANALYSIS_PERIOD, build_training_output_filename
 from et_downscaling.model_spec import (
     CANDIDATE_COLUMN,
     COMMON_MODEL_FEATURES,
@@ -249,9 +250,12 @@ def main():
         / "processed"
         / "training"
         / "S2"
-        / "ET_S2_S1_METEO_KC_FOOTPRINT_2021_2023.csv"
+        / build_training_output_filename("S2")
     )
-    output_directory = project_root / "outputs" / "processed" / "models" / "S2"
+    output_directory = (
+        project_root / "outputs" / "processed" / "models" / "S2"
+        / ANALYSIS_PERIOD.label
+    )
     output_directory.mkdir(parents=True, exist_ok=True)
 
     if not input_path.exists():
@@ -261,8 +265,12 @@ def main():
     master = pd.read_csv(input_path, dtype={"station_id": "string"}).copy()
     print("Master rows:", len(master))
 
-    if len(master) != 690:
-        raise RuntimeError("Expected 690 rows in the Sentinel-2 training master.")
+    expected_rows = master["period_start"].nunique() * master["station_id"].nunique()
+    if len(master) != expected_rows:
+        raise RuntimeError(
+            f"Expected a complete period x support master ({expected_rows} rows), "
+            f"found {len(master)}."
+        )
     if master.duplicated(["station_id", "period_start"]).any():
         raise RuntimeError("Duplicate station-period rows found in training master.")
 
@@ -390,6 +398,7 @@ def main():
 
     metric_records = metrics.set_index("model").to_dict(orient="index")
     metadata = {
+        **ANALYSIS_PERIOD.metadata(),
         "optical_source": "S2",
         "target": TARGET_COLUMN,
         "training_support": "MODIS footprint x MODIS period",
@@ -434,7 +443,7 @@ def main():
             "global_mean": "Mean Kc of the training folds.",
             "modis_persistence": (
                 "Previous MODIS-period Kc at the same station, derived from the "
-                "complete 690-row MODIS master before optical candidate filtering."
+                "complete MODIS period-support master before optical candidate filtering."
             ),
         },
     }

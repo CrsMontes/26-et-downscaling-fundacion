@@ -9,6 +9,7 @@ import pandas as pd
 
 from et_downscaling.config import (
     END_DATE,
+    OUTPUT_PERIOD_LABEL,
     START_DATE,
 )
 from et_downscaling.hls import (
@@ -32,6 +33,7 @@ OUTPUT_DIRECTORY = (
     Path("outputs")
     / "diagnostics"
     / "hls_fvc_recalibration"
+    / OUTPUT_PERIOD_LABEL
 )
 
 OBSERVATIONS_FILENAME = (
@@ -79,8 +81,8 @@ def parse_arguments():
         "--restart",
         action="store_true",
         help=(
-            "Discard the diagnostic checkpoint and recompute all "
-            "138 MODIS periods. The production FVC config is never "
+            "Discard the diagnostic checkpoint and recompute all selected "
+            "MODIS periods. The production FVC config is never "
             "overwritten by this script."
         ),
     )
@@ -686,11 +688,8 @@ def main():
         modis_collection
     )
 
-    if len(periods) != 138:
-        raise RuntimeError(
-            "Expected 138 MODIS periods, found "
-            f"{len(periods)}."
-        )
+    if not periods:
+        raise RuntimeError("No MODIS periods found for the configured interval.")
 
     footprint_list = (
         station_footprints.toList(

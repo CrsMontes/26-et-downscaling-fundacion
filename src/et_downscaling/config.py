@@ -1,4 +1,6 @@
-from datetime import date, timedelta
+import os
+
+from .period import AnalysisPeriod
 
 
 # ============================================================
@@ -14,8 +16,9 @@ STATIONS_GEOJSON_PATH = "data/stations/fundacion_stations.geojson"
 
 # START_DATE is inclusive.
 # END_DATE is exclusive, following Earth Engine filterDate().
-START_DATE = "2021-01-01"
-END_DATE = "2024-01-01"
+START_DATE = os.environ.get("ET_START_DATE", "2021-01-01")
+END_DATE = os.environ.get("ET_END_DATE_EXCLUSIVE", "2024-01-01")
+ANALYSIS_PERIOD = AnalysisPeriod.from_strings(START_DATE, END_DATE)
 
 
 # ============================================================
@@ -43,46 +46,7 @@ MODIS_REQUIRE_STRICT_QC = False
 # ============================================================
 
 def _build_period_label():
-    start_date = date.fromisoformat(
-        START_DATE
-    )
-
-    end_date = date.fromisoformat(
-        END_DATE
-    )
-
-    if end_date <= start_date:
-        raise ValueError(
-            "END_DATE must be later than START_DATE."
-        )
-
-    last_included_date = (
-        end_date
-        - timedelta(days=1)
-    )
-
-    if (
-        start_date.month == 1
-        and start_date.day == 1
-        and end_date.month == 1
-        and end_date.day == 1
-    ):
-        last_year = end_date.year - 1
-
-        if start_date.year == last_year:
-            return str(
-                start_date.year
-            )
-
-        return (
-            f"{start_date.year}_"
-            f"{last_year}"
-        )
-
-    return (
-        f"{start_date:%Y%m%d}_"
-        f"{last_included_date:%Y%m%d}"
-    )
+    return ANALYSIS_PERIOD.label
 
 
 OUTPUT_PERIOD_LABEL = (

@@ -19,6 +19,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from et_downscaling.config import ANALYSIS_PERIOD, build_training_output_filename
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 from et_downscaling.stations import load_station_dataframe
@@ -53,13 +54,14 @@ def get_project_root() -> Path:
 
 
 def get_paths(project_root: Path) -> dict[str, Path]:
+    period_label = ANALYSIS_PERIOD.label
     return {
         "field_daily": project_root / "data" / "field" / "field_etgage.csv",
-        "training_master": project_root / "outputs" / "processed" / "training" / "S2" / "ET_S2_S1_METEO_KC_FOOTPRINT_2021_2023.csv",
-        "daily_reference": project_root / "outputs" / "processed" / "training" / "S2" / "reference_et_daily_2021_2023.csv",
-        "oof": project_root / "outputs" / "processed" / "models" / "S2" / "kc_model_oof_predictions_ge90.csv",
-        "tables": project_root / "outputs" / "processed" / "field_validation" / "tables",
-        "figures": project_root / "outputs" / "processed" / "field_validation" / "figures",
+        "training_master": project_root / "outputs" / "processed" / "training" / "S2" / build_training_output_filename("S2"),
+        "daily_reference": project_root / "outputs" / "processed" / "training" / "S2" / f"reference_et_daily_{period_label}.csv",
+        "oof": project_root / "outputs" / "processed" / "models" / "S2" / period_label / "kc_model_oof_predictions_ge90.csv",
+        "tables": project_root / "outputs" / "processed" / "field_validation" / period_label / "tables",
+        "figures": project_root / "outputs" / "processed" / "field_validation" / period_label / "figures",
     }
 
 

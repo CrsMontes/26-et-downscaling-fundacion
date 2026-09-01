@@ -28,7 +28,8 @@ from et_downscaling.aoa import (
     build_aoa_images,
     load_aoa_spec,
 )
-from et_downscaling.config import ANALYSIS_CRS
+from et_downscaling.config import ANALYSIS_CRS, ANALYSIS_PERIOD
+from et_downscaling.period import require_matching_period_metadata
 from et_downscaling.model_spec import (
     COMMON_MODEL_FEATURES,
     PRODUCTION_MODEL_FILENAME,
@@ -67,7 +68,7 @@ def parse_arguments():
         default=None,
         help=(
             "MODIS period start (YYYY-MM-DD). If omitted, select the strongest "
-            "period from the accepted 349-row training population."
+            "period from the configured training population."
         ),
     )
     parser.add_argument(
@@ -97,23 +98,27 @@ def get_paths(project_root: Path) -> dict[str, Path]:
         / "processed"
         / "models"
         / "S2"
+        / ANALYSIS_PERIOD.label
     )
     return {
         "model": model_directory / PRODUCTION_MODEL_FILENAME,
         "aoa": model_directory / "aoa_spec.json",
         "training": model_directory / "kc_model_training_population_ge90.csv",
+        "metadata": model_directory / "kc_model_comparison_ge90.json",
         "output": (
             project_root
             / "outputs"
             / "processed"
             / "predictions"
             / "S2"
+            / ANALYSIS_PERIOD.label
         ),
         "qa": (
             project_root
             / "outputs"
             / "processed"
             / "qa"
+            / ANALYSIS_PERIOD.label
             / "spatial_smoke_test.json"
         ),
     }
@@ -399,6 +404,7 @@ def main():
     args = parse_arguments()
     project_root = Path(__file__).resolve().parents[1]
     paths = get_paths(project_root)
+    require_matching_period_metadata(paths["metadata"], ANALYSIS_PERIOD)
 
     if not paths["aoa"].is_file():
         raise FileNotFoundError(
@@ -612,6 +618,7 @@ def main():
     print("Production model trees:", len(tree_strings))
 
     qa_record = {
+        **ANALYSIS_PERIOD.metadata(),
         "status": "PASS",
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "earth_engine_project": project_id,

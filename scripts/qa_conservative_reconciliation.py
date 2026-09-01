@@ -17,6 +17,8 @@ import numpy as np
 import pandas as pd
 
 from et_downscaling.model_spec import COMMON_MODEL_FEATURES, PRODUCTION_MODEL_FILENAME
+from et_downscaling.config import ANALYSIS_PERIOD
+from et_downscaling.period import require_matching_period_metadata
 from et_downscaling.model_transfer import build_ee_regressor
 from et_downscaling.modis import (
     assign_station_footprints,
@@ -43,7 +45,14 @@ def parse_arguments():
         description="QA fine fill and MODIS conservation on a bounded window."
     )
     parser.add_argument("--project", required=True)
-    parser.add_argument("--period-start", default="2022-05-25")
+    parser.add_argument(
+        "--period-start",
+        default=None,
+        help=(
+            "MODIS period start (YYYY-MM-DD). If omitted, select a "
+            "deterministic well-supported period from the training population."
+        ),
+    )
     parser.add_argument(
         "--station-ids",
         nargs="+",
@@ -164,20 +173,73 @@ def describe_fill(
     return summaries, all_pass
 
 
+def resolve_period_start(
+    requested_period_start: str | None,
+    training_path: Path,
+) -> tuple[str, str]:
+    training = pd.read_csv(training_path, dtype={"station_id": "string"})
+    required = {"period_start", "station_id", "optical_union_coverage_pct"}
+    missing = required - set(training.columns)
+    if missing:
+        raise ValueError(
+            "Training population is missing columns required for QA period "
+            f"selection: {sorted(missing)}"
+        )
+
+    training["period_start"] = pd.to_datetime(
+        training["period_start"], errors="raise"
+    ).dt.strftime("%Y-%m-%d")
+    valid_periods = set(training["period_start"])
+
+    if requested_period_start is not None:
+        normalized = pd.Timestamp(requested_period_start).strftime("%Y-%m-%d")
+        if normalized not in valid_periods:
+            raise ValueError(
+                f"Requested MODIS period {normalized} is not present in the "
+                f"{ANALYSIS_PERIOD.label} training population."
+            )
+        return normalized, "explicit"
+
+    summary = (
+        training.groupby("period_start", as_index=False)
+        .agg(
+            station_count=("station_id", "nunique"),
+            mean_optical_coverage=("optical_union_coverage_pct", "mean"),
+        )
+        .sort_values(
+            ["station_count", "mean_optical_coverage", "period_start"],
+            ascending=[False, False, True],
+        )
+    )
+    if summary.empty:
+        raise RuntimeError("Training population contains no MODIS periods.")
+    return str(summary.iloc[0]["period_start"]), "automatic_training_support"
+
+
 def main() -> None:
     args = parse_arguments()
     root = get_project_root()
-    output_directory = root / "outputs" / "processed" / "qa" / "conservative_reconciliation"
+    metadata_path = (
+        root / "outputs" / "processed" / "models" / "S2"
+        / ANALYSIS_PERIOD.label / "kc_model_comparison_ge90.json"
+    )
+    require_matching_period_metadata(metadata_path, ANALYSIS_PERIOD)
+    training_path = metadata_path.parent / "kc_model_training_population_ge90.csv"
+    period_start, period_selection_method = resolve_period_start(
+        args.period_start, training_path
+    )
+    output_directory = root / "outputs" / "processed" / "qa" / ANALYSIS_PERIOD.label / "conservative_reconciliation"
     output_directory.mkdir(parents=True, exist_ok=True)
 
     ee.Initialize(project=args.project)
     ee.Number(1).getInfo()
     stations = station_collection(args.station_ids)
     geometry = stations.geometry().buffer(args.buffer_m)
-    context = build_production_stack(args.period_start, geometry)
+    context = build_production_stack(period_start, geometry)
 
     model_path = (
         root / "outputs" / "processed" / "models" / "S2"
+        / ANALYSIS_PERIOD.label
         / PRODUCTION_MODEL_FILENAME
     )
     model = joblib.load(model_path)
@@ -225,7 +287,7 @@ def main() -> None:
             geometry=feature.geometry().centroid(1),
             maxPixels=100,
         )
-        return feature.set(values).set("period_start", args.period_start)
+        return feature.set(values).set("period_start", period_start)
 
     all_parent_payload = qa_grid.map(attach_coarse_qa).getInfo()
     all_parent_qa = pd.DataFrame(feature_rows(all_parent_payload))
@@ -284,20 +346,22 @@ def main() -> None:
     )
     status = "PASS" if fill_pass and conservation_pass else "FAIL"
 
-    compact_date = args.period_start.replace("-", "")
+    compact_date = period_start.replace("-", "")
     all_parent_path = output_directory / f"multi_parent_conservation_{compact_date}.csv"
     station_parent_path = output_directory / f"fill_parent_qa_{compact_date}.csv"
     fine_path = output_directory / f"fine_fill_pixels_{compact_date}.csv"
-    report_path = output_directory / f"conservative_reconciliation_{compact_date}.json"
+    report_path = output_directory / "conservative_reconciliation.json"
     all_parent_qa.to_csv(all_parent_path, index=False)
     station_parent_qa.to_csv(station_parent_path, index=False)
     fine_samples.to_csv(fine_path, index=False)
 
     report = {
+        **ANALYSIS_PERIOD.metadata(),
         "status": status,
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "earth_engine_project": args.project,
-        "period_start": args.period_start,
+        "period_start": period_start,
+        "period_selection_method": period_selection_method,
         "station_ids": args.station_ids,
         "buffer_m": args.buffer_m,
         "rf_trees": len(tree_strings),

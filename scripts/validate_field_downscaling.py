@@ -38,8 +38,10 @@ import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 from et_downscaling.config import (
+    ANALYSIS_PERIOD,
     ANALYSIS_CRS,
     S1_FULL_COVERAGE,
+    build_training_output_filename,
 )
 from et_downscaling.model_spec import (
     CANDIDATE_COLUMN,
@@ -156,6 +158,7 @@ def get_paths(project_root: Path) -> dict[str, Path]:
         / "outputs"
         / "processed"
         / "field_validation"
+        / ANALYSIS_PERIOD.label
     )
     tables = base / "tables"
     figures = base / "figures"
@@ -171,6 +174,7 @@ def get_paths(project_root: Path) -> dict[str, Path]:
             / "processed"
             / "models"
             / "S2"
+            / ANALYSIS_PERIOD.label
             / "kc_model_oof_predictions_ge90.csv"
         ),
         "training_master": (
@@ -179,7 +183,7 @@ def get_paths(project_root: Path) -> dict[str, Path]:
             / "processed"
             / "training"
             / "S2"
-            / "ET_S2_S1_METEO_KC_FOOTPRINT_2021_2023.csv"
+            / build_training_output_filename("S2")
         ),
         "checkpoint": (
             tables
