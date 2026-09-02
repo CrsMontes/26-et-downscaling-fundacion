@@ -23,8 +23,10 @@ from __future__ import annotations
 import csv
 import json
 import math
+import random
+import time
 import urllib.request
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,6 +56,30 @@ from .workspace import get_workspace_paths
 
 DEFAULT_TILE_SIZE_M = 4000
 DEFAULT_MIN_TILE_SIZE_M = 500
+
+DIRECT_DOWNLOAD_MAX_ATTEMPTS = 6
+TRANSIENT_HTTP_STATUS_CODES = {
+    429,
+    500,
+    502,
+    503,
+    504,
+}
+
+
+def _is_transient_http_status(code: int) -> bool:
+    return int(code) in TRANSIENT_HTTP_STATUS_CODES
+
+
+def _download_retry_delay_seconds(attempt: int) -> float:
+    base = min(
+        30.0,
+        2.0 ** attempt,
+    )
+    return base + random.uniform(
+        0.0,
+        min(1.0, base * 0.25),
+    )
 OUTPUT_BANDS = [
     "ET_mm_period",
     "Kc_raw",
@@ -399,7 +425,6 @@ def _is_splittable_error(error: Exception) -> bool:
         "computation timed out",
         "payload",
         "response too large",
-        "internal error",
     )
     return any(token in message for token in tokens)
 
@@ -453,37 +478,105 @@ def download_tile(
         tile=tile,
     )
 
-    url = image.getDownloadURL(
-        _tile_download_parameters(tile)
-    )
+    parameters = _tile_download_parameters(tile)
 
     temporary = path.with_suffix(".part")
     temporary.unlink(missing_ok=True)
 
-    try:
-        with urllib.request.urlopen(
-            url,
-            timeout=timeout_seconds,
-        ) as response:
-            with temporary.open("wb") as output:
-                while True:
-                    chunk = response.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    output.write(chunk)
-    except HTTPError as error:
+    for attempt in range(
+        1,
+        DIRECT_DOWNLOAD_MAX_ATTEMPTS + 1,
+    ):
         try:
-            body = error.read().decode(
-                "utf-8",
-                errors="replace",
+            url = image.getDownloadURL(
+                parameters
             )
-        except Exception:
-            body = ""
-        temporary.unlink(missing_ok=True)
-        raise RuntimeError(
-            "Earth Engine direct download failed "
-            f"(HTTP {error.code}): {body or error.reason}"
-        ) from error
+
+            with urllib.request.urlopen(
+                url,
+                timeout=timeout_seconds,
+            ) as response:
+                with temporary.open("wb") as output:
+                    while True:
+                        chunk = response.read(
+                            1024 * 1024
+                        )
+                        if not chunk:
+                            break
+                        output.write(chunk)
+
+            break
+
+        except HTTPError as error:
+            try:
+                body = error.read().decode(
+                    "utf-8",
+                    errors="replace",
+                )
+            except Exception:
+                body = ""
+
+            temporary.unlink(
+                missing_ok=True
+            )
+
+            if (
+                _is_transient_http_status(
+                    error.code
+                )
+                and attempt
+                < DIRECT_DOWNLOAD_MAX_ATTEMPTS
+            ):
+                delay = (
+                    _download_retry_delay_seconds(
+                        attempt
+                    )
+                )
+                print(
+                    "Transient Earth Engine "
+                    f"HTTP {error.code}; "
+                    f"retry {attempt}/"
+                    f"{DIRECT_DOWNLOAD_MAX_ATTEMPTS} "
+                    f"in {delay:.1f} s..."
+                )
+                time.sleep(delay)
+                continue
+
+            raise RuntimeError(
+                "Earth Engine direct download failed "
+                f"(HTTP {error.code}): "
+                f"{body or error.reason}"
+            ) from error
+
+        except (URLError, TimeoutError) as error:
+            temporary.unlink(
+                missing_ok=True
+            )
+
+            if (
+                attempt
+                < DIRECT_DOWNLOAD_MAX_ATTEMPTS
+            ):
+                delay = (
+                    _download_retry_delay_seconds(
+                        attempt
+                    )
+                )
+                print(
+                    "Transient network error during "
+                    "Earth Engine download; "
+                    f"retry {attempt}/"
+                    f"{DIRECT_DOWNLOAD_MAX_ATTEMPTS} "
+                    f"in {delay:.1f} s: {error}"
+                )
+                time.sleep(delay)
+                continue
+
+            raise RuntimeError(
+                "Earth Engine direct download failed "
+                "after repeated network errors: "
+                f"{error}"
+            ) from error
 
     temporary.replace(path)
     _validate_tile_file(path, tile)

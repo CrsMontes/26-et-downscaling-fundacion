@@ -48,3 +48,15 @@ def test_only_resource_errors_trigger_adaptive_split():
         RuntimeError("Missing Sentinel-2 observations.")
     )
 
+
+def test_transient_http_statuses_are_retryable():
+    from et_downscaling.local_tiles import (
+        _is_transient_http_status,
+    )
+
+    for code in (429, 500, 502, 503, 504):
+        assert _is_transient_http_status(code)
+
+    assert not _is_transient_http_status(400)
+    assert not _is_transient_http_status(404)
+
