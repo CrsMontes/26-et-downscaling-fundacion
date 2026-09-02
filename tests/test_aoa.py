@@ -1,7 +1,7 @@
 ﻿import numpy as np
 import pandas as pd
 
-from et_downscaling.aoa import (
+from et_downscaling.aoa_ridge25 import (
     build_unweighted_aoa,
     score_unweighted_aoa,
 )
@@ -91,3 +91,4 @@ def test_identical_training_point_has_zero_di():
 
     assert np.isclose(di[0], 0.0)
     assert inside[0]
+
