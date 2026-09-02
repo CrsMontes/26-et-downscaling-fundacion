@@ -1,81 +1,104 @@
-"""Run or resume the accepted Fundación ET workflow.
+"""Run the parsimonious Fundación ET workflow from the three canonical inputs.
 
-Raw exports are reused when present. Training, validation, and QA outputs are
-reused unless --rebuild-model or --rebuild-all is requested. After the
-pipeline is ready, the user may generate one or more 8-day ET products.
+Scientific execution
+--------------------
+1. Reuse or refresh complete raw Earth Engine extractions in the external
+   workspace.
+2. Rebuild the local complete master database.
+3. Rebuild the GE90 Ridge-25 population.
+4. Perform spatial-block and leave-one-year-out OOF validation.
+5. Fit Ridge-25 in memory on all eligible observations.
+6. Save current-run tables, metadata and core diagnostic figures.
+7. Optionally generate one locally downloaded, adaptively tiled 20 m ET raster.
+
+A fitted model is never loaded from disk. Reconciliation is never used during
+training or OOF validation. Google Drive and persistent Earth Engine assets are
+not production destinations.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import et_downscaling
-import pandas as pd
-
-from et_downscaling.aoa import load_aoa_spec
-from et_downscaling.model_spec import RF_PARAMETERS
-from et_downscaling.production import (
-    MODIS_CONSERVATION_TOLERANCE_MM,
-    MODIS_RECONCILIATION_PASSES,
-    PREDICTION_SCALE_M,
-)
-from et_downscaling.period import AnalysisPeriod, require_matching_period_metadata
 
 
-OPTIONAL_OUTPUT_KEYS = {
-    "field_checkpoint",
-    "field_figure_01",
-    "field_figure_02",
-    "field_figure_03",
-    "field_figure_04",
-    "field_figure_05",
-    "field_figure_06",
-    "field_figure_07",
-    "field_figure_08",
-    "field_figure_09",
-}
-
-QA_OUTPUT_KEYS = {
-    "smoke_qa",
-    "conservative_qa",
-}
+CANONICAL_START_DATE = "2020-01-01"
+CANONICAL_END_DATE_EXCLUSIVE = "2025-01-01"
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="Run or resume the complete Fundación ET workflow."
+        description=(
+            "Run the complete parsimonious Fundación ET workflow."
+        )
     )
     parser.add_argument(
         "--project",
         default=None,
-        help="Google Cloud Project ID with Earth Engine access.",
+        help=(
+            "Google Cloud Project ID with Earth Engine access. "
+            "Prompted interactively when omitted."
+        ),
     )
     parser.add_argument(
-        "--rebuild-model",
+        "--start-date",
+        default=CANONICAL_START_DATE,
+    )
+    parser.add_argument(
+        "--end-date-exclusive",
+        default=CANONICAL_END_DATE_EXCLUSIVE,
+    )
+    parser.add_argument(
+        "--refresh-raw",
         action="store_true",
-        help="Reuse raw exports but rebuild training, validation, and QA.",
+        help=(
+            "Force rebuilding reusable raw satellite and "
+            "meteorological extractions."
+        ),
     )
     parser.add_argument(
-        "--rebuild-all",
+        "--no-raster",
         action="store_true",
-        help="Force raw exports and rebuild the complete workflow.",
+        help=(
+            "Finish after training, validation and diagnostics."
+        ),
     )
     parser.add_argument(
-        "--no-map",
+        "--raster-date",
+        default=None,
+        help=(
+            "Generate one MODIS-period ET raster without an "
+            "interactive prompt (YYYY-MM-DD)."
+        ),
+    )
+    parser.add_argument(
+        "--tile-size-m",
+        type=int,
+        default=4000,
+    )
+    parser.add_argument(
+        "--min-tile-size-m",
+        type=int,
+        default=500,
+    )
+    parser.add_argument(
+        "--skip-reference-check",
         action="store_true",
-        help="Do not prompt for an ET map after pipeline QA.",
+        help=(
+            "Do not enforce the 799-row canonical 2020-2024 "
+            "reference gate."
+        ),
     )
     parser.add_argument(
-        "--drive-folder",
-        default="ET_Fundacion",
+        "--no-figures",
+        action="store_true",
     )
-    parser.add_argument("--start-date", default="2021-01-01")
-    parser.add_argument("--end-date-exclusive", default="2024-01-01")
     return parser.parse_args()
 
 
@@ -83,467 +106,511 @@ def get_project_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def validate_imported_package_root(project_root: Path) -> Path:
-    """Fail before pipeline work if the editable package belongs elsewhere."""
-    expected_package_root = (
-        Path(project_root).resolve()
+def resolve_project_id(value: str | None) -> str:
+    project_id = (
+        value.strip()
+        if value
+        else ""
+    )
+    if not project_id:
+        project_id = input(
+            "Google Cloud Project ID: "
+        ).strip()
+    if not project_id:
+        raise ValueError(
+            "Google Cloud Project ID cannot be empty."
+        )
+    return project_id
+
+
+def configure_period_environment(
+    start_date: str,
+    end_date_exclusive: str,
+) -> None:
+    os.environ["ET_START_DATE"] = start_date
+    os.environ[
+        "ET_END_DATE_EXCLUSIVE"
+    ] = end_date_exclusive
+
+
+def validate_imported_package_root(
+    project_root: Path,
+) -> Path:
+
+    expected = (
+        project_root
         / "src"
         / "et_downscaling"
     ).resolve()
-    imported_file_value = getattr(et_downscaling, "__file__", None)
+    imported = Path(
+        et_downscaling.__file__
+    ).resolve()
 
-    if not imported_file_value:
-        raise RuntimeError(
-            "Cannot determine the imported et_downscaling package path.\n"
-            f"Expected package root: {expected_package_root}\n"
-            "Reinstall this working copy with: python -m pip install -e ."
-        )
-
-    imported_file = Path(imported_file_value).resolve()
     try:
-        imported_file.relative_to(expected_package_root)
+        imported.relative_to(
+            expected
+        )
     except ValueError:
         raise RuntimeError(
-            "Imported et_downscaling belongs to a different repository.\n"
-            f"Expected package root: {expected_package_root}\n"
-            f"Actually imported from: {imported_file}\n"
-            "No pipeline work was started. Reinstall this working copy with: "
-            "python -m pip install -e ."
+            "The imported et_downscaling package belongs "
+            "to a different repository.\n"
+            f"Expected: {expected}\n"
+            f"Imported: {imported}\n"
+            "No pipeline work was started.\n"
+            "Run: python -m pip install -e ."
         ) from None
 
-    return imported_file
-
-
-def resolve_project_id(project_id: str | None) -> str:
-    value = project_id.strip() if project_id else ""
-    if not value:
-        value = input("Google Cloud Project ID: ").strip()
-    if not value:
-        raise ValueError("Google Cloud Project ID cannot be empty.")
-    return value
-
-
-def get_paths(project_root: Path, period: AnalysisPeriod) -> dict[str, Path]:
-    model_directory = (
-        project_root
-        / "outputs"
-        / "processed"
-        / "models"
-        / "S2"
-        / period.label
-    )
-    field_tables = (
-        project_root
-        / "outputs"
-        / "processed"
-        / "field_validation"
-        / period.label
-        / "tables"
-    )
-    field_figures = field_tables.parent / "figures"
-    return {
-        "model": model_directory / "rf_kc_s2_production_ge90.joblib",
-        "common_model": model_directory / "rf_kc_s2_common_ge90.joblib",
-        "full_model": model_directory / "rf_kc_s2_full_ge90.joblib",
-        "aoa": model_directory / "aoa_spec.json",
-        "training_population": (
-            model_directory / "kc_model_training_population_ge90.csv"
-        ),
-        "model_metrics": model_directory / "kc_model_comparison_ge90.csv",
-        "fold_metrics": model_directory / "kc_model_spatial_folds_ge90.csv",
-        "oof_predictions": (
-            model_directory / "kc_model_oof_predictions_ge90.csv"
-        ),
-        "model_metadata": model_directory / "kc_model_comparison_ge90.json",
-        "field_daily_qc": field_tables / "field_daily_qc.csv",
-        "field_scale_factor": field_tables / "field_scale_factor.csv",
-        "field_reference_eto": field_tables / "field_reference_eto_check.csv",
-        "field_pairs_diagnostic": (
-            field_tables / "field_modis_period_pairs_diagnostic_reproduction.csv"
-        ),
-        "field_current_oof": field_tables / "field_current_oof_comparison.csv",
-        "field_current_metrics": field_tables / "field_current_oof_metrics.csv",
-        "field_uncertainty": field_tables / "field_instrument_uncertainty.csv",
-        "field_checkpoint": (
-            field_tables / "field_oof_downscaling_checkpoint.csv"
-        ),
-        "field_pairs_20m": field_tables / "field_oof_downscaled_20m_pairs.csv",
-        "field_metrics": field_tables / "field_oof_downscaled_20m_metrics.csv",
-        "field_by_station": (
-            field_tables / "field_oof_downscaled_20m_by_station.csv"
-        ),
-        "field_figure_01": field_figures / "FD01_daily_raw_qc.png",
-        "field_figure_02": field_figures / "FD02_scale_factor.png",
-        "field_figure_03": field_figures / "FD03_reference_eto_check.png",
-        "field_figure_04": field_figures / "FD04_field_vs_modis_scatter.png",
-        "field_figure_05": field_figures / "FD05_field_vs_modis_series.png",
-        "field_figure_06": field_figures / "FD06_current_oof_vs_field.png",
-        "field_figure_07": field_figures / "FD07_instrument_uncertainty.png",
-        "field_figure_08": field_figures / "FD08_oof_downscaling_vs_field.png",
-        "field_figure_09": field_figures / "FD09_oof_downscaled_series.png",
-        "smoke_qa": (
-            project_root
-            / "outputs"
-            / "processed"
-            / "qa"
-            / period.label
-            / "spatial_smoke_test.json"
-        ),
-        "conservative_qa": (
-            project_root
-            / "outputs"
-            / "processed"
-            / "qa"
-            / period.label
-            / "conservative_reconciliation"
-            / "conservative_reconciliation.json"
-        ),
-    }
-
-
-def require_canonical_inputs(project_root: Path) -> None:
-    required = [
-        project_root / "data" / "boundaries" / "fundacion_basin.geojson",
-        project_root / "data" / "stations" / "fundacion_stations.geojson",
-        project_root / "data" / "field" / "field_etgage.csv",
-    ]
-    missing = [str(path) for path in required if not path.is_file()]
-    if missing:
-        raise FileNotFoundError(
-            "Missing canonical project inputs:\n" + "\n".join(missing)
-        )
+    return imported
 
 
 def run_script(
     project_root: Path,
     script_name: str,
-    arguments: list[str] | None = None,
-    stdin_text: str | None = None,
-    period: AnalysisPeriod | None = None,
+    arguments: list[str],
+    project_id: str | None = None,
 ) -> None:
-    arguments = arguments or []
     command = [
         sys.executable,
-        str(project_root / "scripts" / script_name),
+        str(
+            project_root
+            / "scripts"
+            / script_name
+        ),
         *arguments,
     ]
     print()
-    print(">", " ".join(command))
-    environment = os.environ.copy()
-    if period is not None:
-        environment["ET_START_DATE"] = period.start_date.isoformat()
-        environment["ET_END_DATE_EXCLUSIVE"] = period.end_date_exclusive.isoformat()
+    print(
+        ">",
+        " ".join(command),
+    )
+
+    stdin_text = (
+        project_id + "\n"
+        if project_id
+        else None
+    )
     subprocess.run(
         command,
         cwd=project_root,
         check=True,
         text=True,
         input=stdin_text,
-        env=environment,
+        env=os.environ.copy(),
     )
 
 
-def final_outputs_ready(paths: dict[str, Path]) -> bool:
-    return all(
-        path.is_file()
-        for key, path in paths.items()
-        if key not in OPTIONAL_OUTPUT_KEYS
+def ask_yes_no(
+    prompt: str,
+    default: bool = False,
+) -> bool:
+    suffix = (
+        " [Y/n]: "
+        if default
+        else " [y/N]: "
     )
+    answer = input(
+        prompt + suffix
+    ).strip().lower()
+
+    if not answer:
+        return default
+
+    return answer in {
+        "y",
+        "yes",
+        "s",
+        "si",
+        "sí",
+    }
 
 
-def analysis_outputs_ready(paths: dict[str, Path]) -> bool:
-    return all(
-        path.is_file()
-        for key, path in paths.items()
-        if key not in OPTIONAL_OUTPUT_KEYS | QA_OUTPUT_KEYS
-    )
-
-
-def build_or_reuse(
-    project_root: Path,
-    project_id: str,
+def resolve_raster_date(
     args,
-    paths: dict[str, Path],
-    period: AnalysisPeriod,
+) -> str | None:
+    if args.no_raster:
+        return None
+
+    if args.raster_date:
+        return args.raster_date
+
+    if not ask_yes_no(
+        "Generate a 20 m ET raster now?",
+        default=False,
+    ):
+        return None
+
+    value = input(
+        "MODIS period start [YYYY-MM-DD]: "
+    ).strip()
+    if not value:
+        return None
+    return value
+
+
+def print_metrics(
+    label: str,
+    metrics: dict[str, float],
 ) -> None:
-    project_input = project_id + "\n"
+    print(label)
+    print(
+        "  n    :",
+        metrics["n"],
+    )
+    print(
+        "  R2   :",
+        f"{metrics['R2']:.6f}",
+    )
+    print(
+        "  RMSE :",
+        f"{metrics['RMSE']:.6f}",
+    )
+    print(
+        "  MAE  :",
+        f"{metrics['MAE']:.6f}",
+    )
+    print(
+        "  BIAS :",
+        f"{metrics['BIAS']:.6f}",
+    )
+    print(
+        "  KGE  :",
+        f"{metrics['KGE']:.6f}",
+    )
+
+
+def main() -> None:
+    args = parse_arguments()
+    configure_period_environment(
+        args.start_date,
+        args.end_date_exclusive,
+    )
+
+    # Period-sensitive et_downscaling imports occur only after
+    # the environment above has been configured.
+    import ee
+    import pandas as pd
+
+    from et_downscaling.config import (
+        OUTPUT_PERIOD_LABEL,
+        build_training_output_filename,
+        get_optical_output_label,
+    )
+    from et_downscaling.local_tiles import (
+        download_ridge25_basin,
+    )
+    from et_downscaling.modeling import (
+        train_and_validate_ridge25,
+    )
+    from et_downscaling.run_reporting import (
+        save_core_figures,
+        save_model_metadata,
+        save_run_tables,
+    )
+    from et_downscaling.workspace import (
+        get_workspace_paths,
+        require_portable_inputs,
+    )
+
+    project_root = get_project_root()
+    validate_imported_package_root(
+        project_root
+    )
+    inputs = require_portable_inputs(
+        project_root
+    )
+    workspace = get_workspace_paths(
+        project_root
+    ).ensure()
+    project_id = resolve_project_id(
+        args.project
+    )
 
     print()
-    print("=== RAW INPUTS ===")
-    meteorology_args = ["--force"] if args.rebuild_all else []
-    satellite_args = ["--optical-source", "S2"]
-    if args.rebuild_all:
-        satellite_args.append("--force")
+    print("=" * 72)
+    print(
+        "FUNDACION ET - PARSIMONIOUS RIDGE-25 PIPELINE"
+    )
+    print("=" * 72)
+    print(
+        "Project root:",
+        project_root,
+    )
+    print(
+        "External workspace:",
+        workspace.root,
+    )
+    print(
+        "Analysis period:",
+        args.start_date,
+        "to",
+        args.end_date_exclusive,
+        "(exclusive)",
+    )
+    print(
+        "Period label:",
+        OUTPUT_PERIOD_LABEL,
+    )
+    print(
+        "Canonical local inputs:",
+        len(inputs),
+    )
+    print(
+        "Google Drive output:",
+        "DISABLED",
+    )
+    print(
+        "Pre-trained model input:",
+        "DISABLED",
+    )
 
-    # These scripts already reuse their outputs when --force is absent.
+    print()
+    print("=== RAW DATA ===")
+    meteorology_arguments = []
+    satellite_arguments = [
+        "--optical-source",
+        "S2",
+    ]
+    if args.refresh_raw:
+        meteorology_arguments.append(
+            "--force"
+        )
+        satellite_arguments.append(
+            "--force"
+        )
+
     run_script(
         project_root,
         "export_meteorology_data.py",
-        meteorology_args,
-        stdin_text=project_input,
-        period=period,
+        meteorology_arguments,
+        project_id=project_id,
     )
     run_script(
         project_root,
         "export_satellite_data.py",
-        satellite_args,
-        stdin_text=project_input,
-        period=period,
+        satellite_arguments,
+        project_id=project_id,
     )
 
-    rebuild_analysis = (
-        args.rebuild_all
-        or args.rebuild_model
-        or not analysis_outputs_ready(paths)
+    print()
+    print("=== COMPLETE MASTER ===")
+    run_script(
+        project_root,
+        "build_training_dataset.py",
+        [
+            "--optical-source",
+            "S2",
+        ],
     )
 
-    if not rebuild_analysis:
-        require_matching_period_metadata(paths["model_metadata"], period)
+    optical_label = (
+        get_optical_output_label(
+            "S2"
+        )
+    )
+    master_path = (
+        workspace.master
+        / optical_label
+        / build_training_output_filename(
+            "S2"
+        )
+    )
+    if not master_path.is_file():
+        raise FileNotFoundError(
+            f"Master was not created: {master_path}"
+        )
+
+    master = pd.read_csv(
+        master_path,
+        dtype={
+            "station_id": "string",
+        },
+    )
+
+    verify_reference = (
+        args.start_date
+        == CANONICAL_START_DATE
+        and args.end_date_exclusive
+        == CANONICAL_END_DATE_EXCLUSIVE
+        and not args.skip_reference_check
+    )
+
+    print()
+    print("=== RIDGE-25 TRAINING / VALIDATION ===")
+    result = train_and_validate_ridge25(
+        master,
+        verify_reference_2020_2024=(
+            verify_reference
+        ),
+    )
+
+    print(
+        "Training population:",
+        len(result.population),
+    )
+    print(
+        "Predictors:",
+        25,
+    )
+    print(
+        "Model fitted in current run:",
+        "YES",
+    )
+    print(
+        "Serialized model loaded:",
+        "NO",
+    )
+    print()
+    print_metrics(
+        "Spatial block OOF:",
+        result.spatial_metrics,
+    )
+    print()
+    print_metrics(
+        "Leave-one-year-out:",
+        result.temporal_metrics,
+    )
+
+    run_id = (
+        datetime.now(timezone.utc)
+        .strftime("%Y%m%dT%H%M%SZ")
+        + "_"
+        + OUTPUT_PERIOD_LABEL
+    )
+    run_directory = (
+        workspace.runs
+        / run_id
+    )
+    run_directory.mkdir(
+        parents=True,
+        exist_ok=False,
+    )
+
+    table_paths = save_run_tables(
+        result,
+        run_directory,
+    )
+
+    metadata_path = save_model_metadata(
+        result,
+        run_directory,
+        {
+            "run_id": run_id,
+            "analysis_start": args.start_date,
+            "analysis_end_exclusive": (
+                args.end_date_exclusive
+            ),
+            "period_label": (
+                OUTPUT_PERIOD_LABEL
+            ),
+            "master_path": str(
+                master_path
+            ),
+            "workspace": str(
+                workspace.root
+            ),
+            "earth_engine_project": (
+                project_id
+            ),
+            "raw_refreshed": bool(
+                args.refresh_raw
+            ),
+            "canonical_reference_check": bool(
+                verify_reference
+            ),
+            "google_drive_used": False,
+            "earth_engine_persistent_asset_created": False,
+            "reconciliation_used_in_training": False,
+        },
+    )
+
+    figure_paths = {}
+    if not args.no_figures:
+        figure_paths = save_core_figures(
+            result,
+            run_directory,
+        )
+
+    print()
+    print("=== CURRENT-RUN OUTPUTS ===")
+    print(
+        "Run directory:",
+        run_directory,
+    )
+    print(
+        "Metadata:",
+        metadata_path,
+    )
+    print(
+        "Tables:",
+        len(table_paths),
+    )
+    print(
+        "Core figures:",
+        len(figure_paths),
+    )
+
+    raster_date = resolve_raster_date(
+        args
+    )
+    if raster_date is None:
         print()
-        print("=== TRAINING / VALIDATION ===")
-        print("Existing accepted outputs: REUSED.")
         print(
-            "Use --rebuild-model after an intentional model-method change, "
-            "or --rebuild-all after an intentional raw-extraction change."
+            "Raster generation: SKIPPED"
         )
-    else:
-        print()
-        print("=== TRAINING / VALIDATION ===")
-        run_script(
-            project_root,
-            "build_training_dataset.py",
-            ["--optical-source", "S2"],
-            period=period,
-        )
-        run_script(project_root, "train_s2_kc_models.py", period=period)
-        run_script(project_root, "analyze_field_diagnostics.py", period=period)
-
-        validation_args = ["--project", project_id]
-        if args.rebuild_all:
-            validation_args.append("--restart")
-
-        run_script(
-            project_root,
-            "validate_field_downscaling.py",
-            validation_args,
-            period=period,
-        )
-
-    rebuild_smoke = (
-        args.rebuild_all
-        or args.rebuild_model
-        or not paths["smoke_qa"].is_file()
-    )
-    if rebuild_smoke:
-        print()
-        print("=== SPATIAL PRODUCTION QA ===")
-        run_script(
-            project_root,
-            "smoke_test_spatial_prediction.py",
-            ["--project", project_id],
-            period=period,
-        )
-    else:
-        require_matching_period_metadata(paths["smoke_qa"], period)
-        print("Existing spatial smoke-test QA: REUSED.")
-
-    rebuild_conservative_qa = (
-        args.rebuild_all
-        or args.rebuild_model
-        or not paths["conservative_qa"].is_file()
-    )
-    if rebuild_conservative_qa:
-        print()
-        print("=== CONSERVATIVE RECONCILIATION QA ===")
-        run_script(
-            project_root,
-            "qa_conservative_reconciliation.py",
-            ["--project", project_id],
-            period=period,
-        )
-    else:
-        require_matching_period_metadata(paths["conservative_qa"], period)
-        print("Existing conservative-reconciliation QA: REUSED.")
-
-
-def print_summary(paths: dict[str, Path]) -> None:
-    if not final_outputs_ready(paths):
-        raise RuntimeError(
-            "The pipeline did not produce all required final outputs."
-        )
-
-    metrics = pd.read_csv(paths["model_metrics"])
-    aoa = load_aoa_spec(paths["aoa"])
-    field = pd.read_csv(paths["field_metrics"])
-    with paths["smoke_qa"].open("r", encoding="utf-8") as file:
-        smoke_qa = json.load(file)
-    if smoke_qa.get("status") != "PASS":
-        raise RuntimeError("Spatial smoke-test QA record is not PASS.")
-    with paths["conservative_qa"].open("r", encoding="utf-8") as file:
-        conservative_qa = json.load(file)
-    if conservative_qa.get("status") != "PASS":
-        raise RuntimeError("Conservative-reconciliation QA record is not PASS.")
-
-    print()
-    print("=" * 72)
-    print("FINAL PIPELINE SUMMARY")
-    print("=" * 72)
-
-    print()
-    print("=== MODEL PERFORMANCE: SPATIAL VALIDATION ===")
-    print(metrics.to_string(index=False))
-
-    print()
-    print("=== AREA OF APPLICABILITY ===")
-    print("Training rows:", aoa["training_rows"])
-    print("Predictors:", len(aoa["features"]))
-    print("Spatial groups:", aoa["spatial_groups"])
-    print("DI threshold:", aoa["threshold"])
-    print(
-        "Training DI outliers:",
-        aoa["train_di_summary"]["outlier_count"],
-    )
-
-    print()
-    print("=== FIELD COMPARISON ===")
-    print(field.to_string(index=False))
-    print(
-        "\nField comparison evaluates local redistribution and is not "
-        "independent validation of true ET at 20 m."
-    )
-
-    print()
-    print("=== PRODUCTION QA ===")
-    print("RF trees:", RF_PARAMETERS["n_estimators"])
-    print("Production grid (m):", PREDICTION_SCALE_M)
-    print("MODIS reconciliation passes:", MODIS_RECONCILIATION_PASSES)
-    print(
-        "MODIS conservation tolerance (mm/period):",
-        MODIS_CONSERVATION_TOLERANCE_MM,
-    )
-    print("Smoke test:", smoke_qa["status"])
-    print("Smoke period:", smoke_qa["period_start"])
-    print("Smoke conservation error (mm/period):", smoke_qa["conservation_error_mm"])
-    print(
-        "Multi-parent conservation parents:",
-        conservative_qa["multi_parent_conservation"]["eligible_parent_count"],
-    )
-    print(
-        "Multi-parent maximum error (mm/period):",
-        conservative_qa["multi_parent_conservation"]["maximum_abs_error_mm"],
-    )
-    print(
-        "Fine-fill QA:",
-        conservative_qa["fine_fill"]["status"],
-    )
-
-
-def ask_yes_no(prompt: str, default: bool = False) -> bool:
-    suffix = " [Y/n]: " if default else " [y/N]: "
-    answer = input(prompt + suffix).strip().lower()
-    if not answer:
-        return default
-    return answer in {"y", "yes", "s", "si", "sí"}
-
-
-def map_loop(
-    project_root: Path,
-    project_id: str,
-    drive_folder: str,
-    period: AnalysisPeriod,
-) -> None:
-    """Interactively evaluate or export one or more 8-day ET products."""
-
-    if not ask_yes_no(
-        "Generate or evaluate an 8-day ET product?",
-        default=False,
-    ):
         return
 
-    while True:
-        period_start = input(
-            "MODIS period start [YYYY-MM-DD] "
-            "(press Enter to finish): "
-        ).strip()
-
-        if not period_start:
-            break
-
-        export = ask_yes_no(
-            "Export the 4-band GeoTIFF to Google Drive?",
-            default=True,
-        )
-
-        arguments = [
-            "--project",
-            project_id,
-            "--period-start",
-            period_start,
-            "--drive-folder",
-            drive_folder,
-        ]
-
-        if export:
-            arguments.append("--export")
-
-        try:
-            run_script(
-                project_root,
-                "run_et_prediction.py",
-                arguments,
-                period=period,
-            )
-        except subprocess.CalledProcessError:
-            print()
-            print(
-                "The requested period failed QA or lacked required inputs. "
-                "No silent fallback was applied."
-            )
-
-        print()
-        print(
-            "Enter another MODIS period start, "
-            "or press Enter to finish."
-        )
-
-
-def main():
-    args = parse_arguments()
-    period = AnalysisPeriod.from_strings(args.start_date, args.end_date_exclusive)
-    project_root = get_project_root()
-    validate_imported_package_root(project_root)
-    require_canonical_inputs(project_root)
-    project_id = resolve_project_id(args.project)
-    paths = get_paths(project_root, period)
-
     print()
-    print("=" * 72)
-    print("FUNDACION ET DOWNSCALING PIPELINE")
-    print("=" * 72)
-    print("Project root:", project_root)
-    print("Earth Engine project:", project_id)
-    print("Analysis period:", period.start_date, "to", period.end_date_exclusive, "(exclusive)")
-    print("Period label:", period.label)
-
-    build_or_reuse(
-        project_root,
-        project_id,
-        args,
-        paths,
-        period,
+    print("=== 20 M ET PRODUCTION ===")
+    print(
+        "Requested MODIS period:",
+        raster_date,
     )
-    print_summary(paths)
+    print(
+        "Initializing Earth Engine for tiled production..."
+    )
+    ee.Initialize(
+        project=project_id
+    )
+    ee.Number(1).getInfo()
 
-    if not args.no_map:
-        map_loop(
-            project_root,
-            project_id,
-            args.drive_folder,
-            period,
-        )
+    product = download_ridge25_basin(
+        project_root=project_root,
+        period_start=raster_date,
+        model=result.model,
+        tile_size_m=args.tile_size_m,
+        min_tile_size_m=(
+            args.min_tile_size_m
+        ),
+    )
 
     print()
-    print("Pipeline finished.")
+    print("=" * 72)
+    print("PIPELINE COMPLETE")
+    print("=" * 72)
+    print(
+        "Model source:",
+        "fitted in current run",
+    )
+    print(
+        "Raster:",
+        product["raster"],
+    )
+    print(
+        "Tile manifest:",
+        product["manifest"],
+    )
+    print(
+        "Production metadata:",
+        product["metadata"],
+    )
+    print(
+        "Google Drive used:",
+        "NO",
+    )
+    print(
+        "Persistent Earth Engine asset created:",
+        "NO",
+    )
 
 
 if __name__ == "__main__":
