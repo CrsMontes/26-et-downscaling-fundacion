@@ -15,18 +15,22 @@ EXPORT = load_script()
 
 
 class LandsatLSTPredictorExportTests(unittest.TestCase):
-    def test_frozen_scope_and_support(self):
+    def test_approved_scope_and_support(self):
         manifest = EXPORT.method_manifest()
         self.assertEqual(manifest["view"], "L8_L9_COMBINED")
-        self.assertEqual(manifest["predictor"], "LST_mean_K")
+        self.assertEqual(manifest["predictor"], "LST_parent_mean_K")
         self.assertEqual(manifest["native_thermal_support_m_approx"], 100)
         self.assertEqual(manifest["distributed_grid_m"], 30)
-        self.assertEqual(manifest["status"], "NO_GO_NOT_USED_FOR_TRAINING")
+        self.assertEqual(manifest["fine_grid_m"], 20)
+        self.assertEqual(manifest["resampling_method"], "bilinear")
+        self.assertEqual(
+            manifest["status"], "APPROVED_PREDICTOR_LADDER_EXTRACTION"
+        )
         self.assertFalse(manifest["historical_dn_ge_293_filter_used"])
 
     def test_dry_plan_does_not_execute(self):
         self.assertEqual(EXPORT.main([]), 0)
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(ValueError):
             EXPORT.main(["--execute"])
 
 

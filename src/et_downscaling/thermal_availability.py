@@ -127,7 +127,8 @@ def _basic_qa_mask(image):
         QA_CLOUD_BIT, QA_CLOUD_SHADOW_BIT, QA_SNOW_BIT,
     ):
         mask = mask.And(qa.bitwiseAnd(1 << bit).eq(0))
-    return mask.rename("basic_valid")
+    saturation_free = ee.Image(image).select("QA_RADSAT").eq(0)
+    return mask.And(saturation_free).rename("basic_valid")
 
 
 def prepare_landsat_lst(image):
@@ -205,9 +206,22 @@ def build_temporal_medoid(period_collection, geometry):
             image.select("LST").subtract(median).abs().multiply(-1).rename("score")
         )
 
+    fallback_source = (
+        ee.ImageCollection(L8_COLLECTION_ID)
+        .filterBounds(geometry)
+        .filter(ee.Filter.eq("PROCESSING_LEVEL", PROCESSING_LEVEL))
+        .first()
+    )
+    reference_source = ee.Image(ee.Algorithms.If(
+        ee.ImageCollection(period_collection).size().gt(0),
+        ee.ImageCollection(period_collection).first(),
+        fallback_source,
+    ))
+    reference_projection = reference_source.select(LST_SOURCE_BAND).projection()
     return (
         safe.map(score).qualityMosaic("score")
         .select(["LST", "ST_QA_K", "sensor_code", "historical_dn_ge_293_valid"])
+        .setDefaultProjection(reference_projection)
         .clip(geometry).toFloat()
         .set({
             "scene_count": ee.ImageCollection(period_collection).size(),
@@ -365,6 +379,7 @@ def configuration_manifest():
         "offset": LST_OFFSET,
         "units": "K",
         "basic_qa_pixel_bits_excluded": [0, 1, 2, 3, 4, 5],
+        "qa_radsat_required_zero": True,
         "water_retained": True,
         "primary_dn_minimum": None,
         "historical_dn_sensitivity_minimum": HISTORICAL_MIN_DN,
