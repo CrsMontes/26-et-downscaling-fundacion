@@ -11,4 +11,5 @@ dependencies:
   - scikit-learn
   - matplotlib
   - ipykernel
+  - pytest
   - pip
