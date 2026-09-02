@@ -15,6 +15,7 @@ from et_downscaling.config import (
     normalize_optical_source,
 )
 from et_downscaling.local_training import build_training_master
+from et_downscaling.workspace import get_workspace_paths
 
 
 def parse_arguments():
@@ -44,16 +45,14 @@ def main():
     optical_source = normalize_optical_source(args.optical_source)
     optical_label = get_optical_output_label(optical_source)
     project_root = Path(__file__).resolve().parents[1]
-
+    workspace = get_workspace_paths(project_root).ensure()
     satellite_path = (
-        project_root
-        / "outputs"
-        / "raw"
+        workspace.raw_cache
         / "satellite"
         / optical_label
         / build_satellite_output_filename(optical_source)
     )
-    meteorology_directory = project_root / "outputs" / "raw" / "meteorology"
+    meteorology_directory = workspace.raw_cache / "meteorology"
     support_path = meteorology_directory / "station_support.csv"
     era5_path = meteorology_directory / f"era5_hourly_{OUTPUT_PERIOD_LABEL}.csv"
     chirps_start = (date.fromisoformat(START_DATE) - timedelta(days=30)).strftime("%Y%m%d")
@@ -103,7 +102,7 @@ def main():
         station_support=station_support,
     )
 
-    output_directory = project_root / "outputs" / "processed" / "training" / optical_label
+    output_directory = workspace.master / optical_label
     output_directory.mkdir(parents=True, exist_ok=True)
     master_path = output_directory / build_training_output_filename(optical_source)
     daily_path = output_directory / f"reference_et_daily_{OUTPUT_PERIOD_LABEL}.csv"

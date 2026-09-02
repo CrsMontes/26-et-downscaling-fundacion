@@ -38,6 +38,7 @@ from et_downscaling.schema import (
 from et_downscaling.sentinel1 import (
     get_sentinel1_collection,
 )
+from et_downscaling.workspace import get_workspace_paths
 
 
 # ============================================================
@@ -524,10 +525,9 @@ def main():
         .parents[1]
     )
 
+    workspace = get_workspace_paths(project_root).ensure()
     source_directory = (
-        project_root
-        / "outputs"
-        / "raw"
+        workspace.raw_cache
         / "satellite"
         / optical_label
     )
@@ -723,11 +723,7 @@ def main():
                     / filename
                 )
 
-                path = (
-                    project_root
-                    / "outputs"
-                    / relative
-                )
+                path = workspace.root / relative
 
                 # =============================================
                 # Reuse completed checkpoint

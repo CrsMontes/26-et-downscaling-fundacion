@@ -6,8 +6,9 @@ from urllib.request import urlretrieve
 
 import ee
 
-from .config import OUTPUT_DIRECTORY, OUTPUT_FILENAME
+from .config import OUTPUT_FILENAME
 from .schema import SATELLITE_EXPORT_SELECTORS
+from .workspace import get_workspace_paths
 
 
 def get_project_root():
@@ -15,9 +16,8 @@ def get_project_root():
 
 
 def get_output_directory():
-    output_directory = get_project_root() / OUTPUT_DIRECTORY
-    output_directory.mkdir(parents=True, exist_ok=True)
-    return output_directory
+    """Return the external generated-data workspace root."""
+    return get_workspace_paths(get_project_root()).ensure().root
 
 
 def export_feature_collection(

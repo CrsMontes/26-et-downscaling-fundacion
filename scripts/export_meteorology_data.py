@@ -19,6 +19,7 @@ from et_downscaling.meteorology_export import (
     get_station_support,
 )
 from et_downscaling.modis import build_modis_inputs
+from et_downscaling.workspace import get_workspace_paths
 
 
 def parse_arguments():
@@ -121,7 +122,8 @@ def get_chirps_year_windows():
 def main():
     args = parse_arguments()
     project_root = Path(__file__).resolve().parents[1]
-    output_directory = project_root / "outputs" / "raw" / "meteorology"
+    workspace = get_workspace_paths(project_root).ensure()
+    output_directory = workspace.raw_cache / "meteorology"
     support_path = output_directory / "station_support.csv"
     era5_path = output_directory / f"era5_hourly_{OUTPUT_PERIOD_LABEL}.csv"
     chirps_start = (date.fromisoformat(START_DATE) - timedelta(days=30)).strftime("%Y%m%d")
