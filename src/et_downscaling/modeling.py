@@ -1,12 +1,17 @@
-"""Final Ridge-25 training and validation from a complete master dataset.
+"""Parsimonious Ridge-25 training and validation from a complete master table.
 
-The accepted model specification is fixed by the completed methodological
-experiments, but the fitted model is NOT a repository input. Every scientific
-run rebuilds the training population, performs out-of-fold validation, and fits
-a new Ridge model from the master dataset.
+The fitted model is rebuilt in memory for every scientific run. This module
+accepts both:
 
-Reconciliation is deliberately absent from this module. It belongs only to
-fine-resolution production after model validation.
+1. the direct local master produced from reusable raw exports; and
+2. the richer diagnostic master used during the five-year predictor experiment.
+
+It derives model-only fields locally (year, seasonal harmonics, and the
+approximately 10 km spatial block) and never uses historical candidate flags
+that required Sentinel-1 or CHIRPS.
+
+Reconciliation is intentionally absent. It is a production-only operation
+applied after fine-resolution prediction.
 """
 
 from __future__ import annotations
@@ -32,9 +37,19 @@ TARGET_COLUMN = "Kc_target"
 KEY_COLUMNS = ["station_id", "period_start"]
 OPTICAL_COVERAGE_THRESHOLD_PCT = 90.0
 RIDGE_ALPHA = 1.0
+SPATIAL_BLOCK_SIZE_KM = 10.0
 
-# Reference gate used only to verify exact reproduction of the accepted
-# 2020-2024 experiment. It is not a universal ecological constraint.
+# Backward-compatible names for the diagnostic predictor-store schema.
+MASTER_OPTICAL_FEATURES = [
+    f"s2_{feature}"
+    for feature in RIDGE25_OPTICAL_FEATURES
+]
+MASTER_MODEL_FEATURES = (
+    MASTER_OPTICAL_FEATURES
+    + list(RIDGE25_METEOROLOGICAL_FEATURES)
+    + list(RIDGE25_HARMONIC_FEATURES)
+)
+
 REFERENCE_ROWS_2020_2024 = 799
 REFERENCE_SPATIAL_COUNTS_2020_2024 = {
     "-811_116": 168,
@@ -49,16 +64,6 @@ REFERENCE_YEAR_COUNTS_2020_2024 = {
     2023: 185,
     2024: 150,
 }
-
-MASTER_OPTICAL_FEATURES = [f"s2_{name}" for name in RIDGE25_OPTICAL_FEATURES]
-MASTER_MODEL_FEATURES = (
-    MASTER_OPTICAL_FEATURES
-    + list(RIDGE25_METEOROLOGICAL_FEATURES)
-    + list(RIDGE25_HARMONIC_FEATURES)
-)
-MASTER_TO_MODEL = dict(
-    zip(MASTER_MODEL_FEATURES, RIDGE25_MODEL_FEATURES, strict=True)
-)
 
 
 @dataclass
@@ -122,56 +127,209 @@ def calculate_metrics(
     }
 
 
-def prepare_ridge25_population(
-    master: pd.DataFrame,
-    *,
-    verify_reference_2020_2024: bool = False,
-) -> pd.DataFrame:
-    """Build the GE90 Ridge-25 population from the complete master table."""
-    required = set(
-        KEY_COLUMNS
-        + [
-            TARGET_COLUMN,
-            "modis_good",
-            "target_complete",
-            "s2_coverage_pct",
-            "spatial_block",
-            "year",
-        ]
-        + MASTER_MODEL_FEATURES
+def _add_harmonics(data: pd.DataFrame) -> pd.DataFrame:
+    """Add the exact two annual harmonic pairs used in model selection."""
+    result = data.copy()
+    dates = pd.to_datetime(result["period_start"], errors="raise")
+    doy = dates.dt.dayofyear.to_numpy(dtype=float)
+
+    for harmonic in (1, 2):
+        angle = (
+            2.0
+            * np.pi
+            * harmonic
+            * doy
+            / 365.25
+        )
+        result[f"doy_sin{harmonic}"] = np.sin(angle)
+        result[f"doy_cos{harmonic}"] = np.cos(angle)
+
+    return result
+
+
+def _resolve_coordinate_columns(
+    data: pd.DataFrame,
+) -> tuple[str, str]:
+    """Resolve the same coordinate preference used by prior training."""
+    candidates = [
+        ("station_longitude", "station_latitude"),
+        ("longitude", "latitude"),
+        (
+            "footprint_centroid_longitude",
+            "footprint_centroid_latitude",
+        ),
+    ]
+
+    for longitude_column, latitude_column in candidates:
+        if (
+            longitude_column in data.columns
+            and latitude_column in data.columns
+        ):
+            return longitude_column, latitude_column
+
+    raise ValueError(
+        "No usable longitude/latitude columns were found "
+        "to derive spatial blocks."
     )
-    missing = sorted(required - set(master.columns))
-    if missing:
+
+
+def _add_spatial_blocks(data: pd.DataFrame) -> pd.DataFrame:
+    """Rebuild the approximately 10 km blocks used in prior model training."""
+    result = data.copy()
+    longitude_column, latitude_column = _resolve_coordinate_columns(result)
+
+    longitude = pd.to_numeric(
+        result[longitude_column],
+        errors="raise",
+    )
+    latitude = pd.to_numeric(
+        result[latitude_column],
+        errors="raise",
+    )
+
+    km_per_degree_latitude = 111.32
+    km_per_degree_longitude = (
+        111.32
+        * np.cos(
+            np.radians(
+                latitude.mean()
+            )
+        )
+    )
+
+    block_x = np.floor(
+        longitude
+        * km_per_degree_longitude
+        / SPATIAL_BLOCK_SIZE_KM
+    ).astype(int)
+
+    block_y = np.floor(
+        latitude
+        * km_per_degree_latitude
+        / SPATIAL_BLOCK_SIZE_KM
+    ).astype(int)
+
+    result["spatial_block"] = (
+        block_x.astype(str)
+        + "_"
+        + block_y.astype(str)
+    )
+
+    return result
+
+
+def canonicalize_master(master: pd.DataFrame) -> pd.DataFrame:
+    """Convert a complete raw-derived or diagnostic master to model schema."""
+    data = master.copy()
+
+    base_required = {
+        "station_id",
+        "period_start",
+        TARGET_COLUMN,
+        "modis_good",
+        "target_complete",
+    }
+    missing_base = sorted(base_required - set(data.columns))
+    if missing_base:
         raise ValueError(
-            "Master dataset is missing required Ridge-25 columns: "
-            + ", ".join(missing)
+            "Master dataset is missing required base columns: "
+            + ", ".join(missing_base)
         )
 
-    data = master.copy()
     data["station_id"] = data["station_id"].astype(str)
     data["period_start"] = pd.to_datetime(
         data["period_start"],
         errors="raise",
-    ).dt.strftime("%Y-%m-%d")
+    )
 
     if data.duplicated(KEY_COLUMNS).any():
-        raise ValueError("Master dataset contains duplicate station-period keys.")
+        raise ValueError(
+            "Master dataset contains duplicate station-period keys."
+        )
 
-    numeric_columns = MASTER_MODEL_FEATURES + [
-        TARGET_COLUMN,
-        "s2_coverage_pct",
-    ]
+    # Direct raw-derived master names this quantity optical_union_coverage_pct.
+    # Diagnostic stores used s2_coverage_pct.
+    if "s2_coverage_pct" not in data.columns:
+        if "optical_union_coverage_pct" not in data.columns:
+            raise ValueError(
+                "Master dataset contains neither s2_coverage_pct nor "
+                "optical_union_coverage_pct."
+            )
+        data["s2_coverage_pct"] = pd.to_numeric(
+            data["optical_union_coverage_pct"],
+            errors="coerce",
+        )
+
+    # The raw-derived S2 master uses production feature names such as
+    # Blue_mean. The five-year diagnostic store prefixed them with s2_.
+    for production_feature in RIDGE25_OPTICAL_FEATURES:
+        if production_feature in data.columns:
+            continue
+        diagnostic_feature = f"s2_{production_feature}"
+        if diagnostic_feature not in data.columns:
+            raise ValueError(
+                "Missing optical predictor in both schemas: "
+                f"{production_feature} / {diagnostic_feature}"
+            )
+        data[production_feature] = pd.to_numeric(
+            data[diagnostic_feature],
+            errors="coerce",
+        )
+
+    missing_meteorology = sorted(
+        set(RIDGE25_METEOROLOGICAL_FEATURES)
+        - set(data.columns)
+    )
+    if missing_meteorology:
+        raise ValueError(
+            "Master dataset is missing final meteorological predictors: "
+            + ", ".join(missing_meteorology)
+        )
+
+    if not set(RIDGE25_HARMONIC_FEATURES).issubset(data.columns):
+        data = _add_harmonics(data)
+
+    if "year" not in data.columns:
+        data["year"] = data["period_start"].dt.year.astype(int)
+    else:
+        data["year"] = pd.to_numeric(
+            data["year"],
+            errors="raise",
+        ).astype(int)
+
+    if "spatial_block" not in data.columns:
+        data = _add_spatial_blocks(data)
+
+    numeric_columns = (
+        list(RIDGE25_MODEL_FEATURES)
+        + [TARGET_COLUMN, "s2_coverage_pct"]
+    )
     data[numeric_columns] = data[numeric_columns].apply(
         pd.to_numeric,
         errors="coerce",
     )
 
+    return data
+
+
+def prepare_ridge25_population(
+    master: pd.DataFrame,
+    *,
+    verify_reference_2020_2024: bool = False,
+) -> pd.DataFrame:
+    """Build the final GE90 population without S1/CHIRPS eligibility gates."""
+    data = canonicalize_master(master)
+
     eligible = (
         data["modis_good"].eq(1)
         & data["target_complete"].eq(1)
         & data[TARGET_COLUMN].notna()
-        & data["s2_coverage_pct"].ge(OPTICAL_COVERAGE_THRESHOLD_PCT)
-        & data[MASTER_MODEL_FEATURES].notna().all(axis=1)
+        & data["s2_coverage_pct"].ge(
+            OPTICAL_COVERAGE_THRESHOLD_PCT
+        )
+        & data[
+            RIDGE25_MODEL_FEATURES
+        ].notna().all(axis=1)
     )
 
     selected = (
@@ -181,13 +339,15 @@ def prepare_ridge25_population(
         .reset_index(drop=True)
     )
 
-    matrix = selected[MASTER_MODEL_FEATURES + [TARGET_COLUMN]].to_numpy(
-        dtype=float
-    )
-    if not np.isfinite(matrix).all():
-        raise ValueError("Ridge-25 training matrix contains non-finite values.")
+    matrix = selected[
+        list(RIDGE25_MODEL_FEATURES)
+        + [TARGET_COLUMN]
+    ].to_numpy(dtype=float)
 
-    selected = selected.rename(columns=MASTER_TO_MODEL)
+    if not np.isfinite(matrix).all():
+        raise ValueError(
+            "Ridge-25 training matrix contains non-finite values."
+        )
 
     if verify_reference_2020_2024:
         verify_reference_population(selected)
@@ -196,15 +356,17 @@ def prepare_ridge25_population(
 
 
 def verify_reference_population(data: pd.DataFrame) -> None:
-    """Verify exact population counts for the accepted 2020-2024 gate."""
+    """Verify exact counts for the accepted five-year gate."""
     if len(data) != REFERENCE_ROWS_2020_2024:
         raise RuntimeError(
-            f"Expected {REFERENCE_ROWS_2020_2024} rows, found {len(data)}."
+            f"Expected {REFERENCE_ROWS_2020_2024} rows, "
+            f"found {len(data)}."
         )
 
     spatial_counts = {
         str(key): int(value)
-        for key, value in data.groupby("spatial_block").size().to_dict().items()
+        for key, value
+        in data.groupby("spatial_block").size().to_dict().items()
     }
     if spatial_counts != REFERENCE_SPATIAL_COUNTS_2020_2024:
         raise RuntimeError(
@@ -213,10 +375,13 @@ def verify_reference_population(data: pd.DataFrame) -> None:
 
     year_counts = {
         int(key): int(value)
-        for key, value in data.groupby("year").size().to_dict().items()
+        for key, value
+        in data.groupby("year").size().to_dict().items()
     }
     if year_counts != REFERENCE_YEAR_COUNTS_2020_2024:
-        raise RuntimeError(f"Unexpected year population: {year_counts}")
+        raise RuntimeError(
+            f"Unexpected year population: {year_counts}"
+        )
 
 
 def _oof_by_group(
@@ -227,17 +392,30 @@ def _oof_by_group(
     fold_rows: list[dict[str, float | int | str]] = []
 
     groups = data[group_column].astype(str)
-    for fold_number, group in enumerate(sorted(groups.unique()), start=1):
+    for fold_number, group in enumerate(
+        sorted(groups.unique()),
+        start=1,
+    ):
         test_mask = groups.eq(group).to_numpy()
         train_mask = ~test_mask
 
         model = build_ridge25_model()
         model.fit(
-            data.loc[train_mask, RIDGE25_MODEL_FEATURES],
-            data.loc[train_mask, TARGET_COLUMN],
+            data.loc[
+                train_mask,
+                RIDGE25_MODEL_FEATURES,
+            ],
+            data.loc[
+                train_mask,
+                TARGET_COLUMN,
+            ],
         )
+
         prediction = model.predict(
-            data.loc[test_mask, RIDGE25_MODEL_FEATURES]
+            data.loc[
+                test_mask,
+                RIDGE25_MODEL_FEATURES,
+            ]
         )
         predictions[test_mask] = prediction
 
@@ -246,7 +424,10 @@ def _oof_by_group(
                 "fold": fold_number,
                 "group": group,
                 **calculate_metrics(
-                    data.loc[test_mask, TARGET_COLUMN],
+                    data.loc[
+                        test_mask,
+                        TARGET_COLUMN,
+                    ],
                     prediction,
                 ),
             }
@@ -258,10 +439,14 @@ def _oof_by_group(
         )
 
     output = data[
-        KEY_COLUMNS + ["spatial_block", "year", TARGET_COLUMN]
+        KEY_COLUMNS
+        + ["spatial_block", "year", TARGET_COLUMN]
     ].copy()
     output["prediction"] = predictions
-    output["error"] = predictions - data[TARGET_COLUMN].to_numpy(dtype=float)
+    output["error"] = (
+        predictions
+        - data[TARGET_COLUMN].to_numpy(dtype=float)
+    )
 
     return output, pd.DataFrame(fold_rows)
 
@@ -271,7 +456,7 @@ def train_and_validate_ridge25(
     *,
     verify_reference_2020_2024: bool = False,
 ) -> Ridge25Result:
-    """Validate Ridge-25 out of fold, then fit it on the full eligible sample."""
+    """Run spatial and temporal OOF validation, then fit Ridge on all rows."""
     population = prepare_ridge25_population(
         master,
         verify_reference_2020_2024=verify_reference_2020_2024,
