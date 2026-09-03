@@ -295,7 +295,10 @@ def main() -> None:
         build_training_output_filename,
         get_optical_output_label,
     )
-    from et_downscaling.local_tiles import (
+    from et_downscaling.aoa_ridge25 import (
+        build_unweighted_aoa,
+    )
+    from et_downscaling.ridge25_local_production import (
         download_ridge25_basin,
     )
     from et_downscaling.modeling import (
@@ -573,10 +576,15 @@ def main() -> None:
     )
     ee.Number(1).getInfo()
 
+    aoa_parameters = build_unweighted_aoa(
+        result.population
+    )
+
     product = download_ridge25_basin(
         project_root=project_root,
         period_start=raster_date,
         model=result.model,
+        aoa_parameters=aoa_parameters,
         tile_size_m=args.tile_size_m,
         min_tile_size_m=(
             args.min_tile_size_m
