@@ -16,8 +16,8 @@ STATIONS_GEOJSON_PATH = "data/stations/fundacion_stations.geojson"
 
 # START_DATE is inclusive.
 # END_DATE is exclusive, following Earth Engine filterDate().
-START_DATE = os.environ.get("ET_START_DATE", "2021-01-01")
-END_DATE = os.environ.get("ET_END_DATE_EXCLUSIVE", "2024-01-01")
+START_DATE = os.environ.get("ET_START_DATE", "2020-01-01")
+END_DATE = os.environ.get("ET_END_DATE_EXCLUSIVE", "2025-01-01")
 ANALYSIS_PERIOD = AnalysisPeriod.from_strings(START_DATE, END_DATE)
 
 
