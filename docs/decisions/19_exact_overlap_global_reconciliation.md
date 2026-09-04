@@ -3,8 +3,10 @@
 ## Status
 
 Accepted as the final reconciliation design after the 2022-04-07 diagnostic.
-Production wiring remains to be completed; the previous iterative rasterio
-reconciliation remains in the repository only as a diagnostic/legacy path.
+The exact-overlap production path is now wired as a separate module while the
+previous iterative rasterio reconciliation remains in the repository only as
+a diagnostic/legacy path. End-to-end acceptance still requires the 2022-04-07
+production QA and the repeated spatial-OOF field comparison.
 
 ## Problem
 
@@ -112,6 +114,6 @@ re-use the explicit overlap matrix after the complete mosaic has been written.
 
 Adopt exact-overlap global reconciliation as the only final conservation path.
 Do not reopen Ridge vs RF, predictors, AOA or the 90% support threshold unless a
-separate scientific result requires it. Next steps are limited to production
-wiring, one 2022-04-07 end-to-end QA, repeated field OOF evaluation, and the
-manuscript.
+separate scientific result requires it. Production is wired through
+`ridge25_overlap_production.py`; next steps are limited to one 2022-04-07
+end-to-end QA, repeated field OOF evaluation, and the manuscript.

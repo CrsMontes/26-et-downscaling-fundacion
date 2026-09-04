@@ -298,7 +298,7 @@ def main() -> None:
     from et_downscaling.aoa_ridge25 import (
         build_unweighted_aoa,
     )
-    from et_downscaling.ridge25_local_production import (
+    from et_downscaling.ridge25_overlap_production import (
         download_ridge25_basin,
     )
     from et_downscaling.modeling import (
