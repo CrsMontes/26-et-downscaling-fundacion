@@ -292,8 +292,6 @@ def main() -> None:
 
     from et_downscaling.config import (
         OUTPUT_PERIOD_LABEL,
-        build_training_output_filename,
-        get_optical_output_label,
     )
     from et_downscaling.aoa_ridge25 import (
         build_unweighted_aoa,
@@ -395,38 +393,31 @@ def main() -> None:
     )
 
     print()
-    print("=== COMPLETE MASTER ===")
-    run_script(
-        project_root,
-        "build_training_dataset.py",
-        [
-            "--optical-source",
-            "S2",
-        ],
-    )
+    print("=== CANONICAL CANDIDATE MASTER ===")
 
-    optical_label = (
-        get_optical_output_label(
-            "S2"
-        )
-    )
     master_path = (
         workspace.master
-        / optical_label
-        / build_training_output_filename(
-            "S2"
-        )
+        / "master_predictor_store.parquet"
     )
+
     if not master_path.is_file():
         raise FileNotFoundError(
-            f"Master was not created: {master_path}"
+            "Canonical candidate master was not found:\n"
+            f"{master_path}\n"
+            "Build the complete candidate master before final training."
         )
 
-    master = pd.read_csv(
+    master = pd.read_parquet(
         master_path,
-        dtype={
-            "station_id": "string",
-        },
+    )
+
+    print(
+        "Candidate-master rows:",
+        len(master),
+    )
+    print(
+        "Candidate-master columns:",
+        len(master.columns),
     )
 
     verify_reference = (
