@@ -11,6 +11,8 @@ dependencies:
   - scikit-learn
   - matplotlib
   - rasterio
+  - scipy
+  - shapely
   - ipykernel
   - pytest
   - pip
