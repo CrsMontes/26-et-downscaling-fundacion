@@ -24,7 +24,7 @@ SPATIAL_FOLDS = {1: ("ST05",), 2: ("ST02", "ST03"), 3: ("ST04",), 4: ("ST01",)}
 
 
 def project_root():
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def diagnostic_root():

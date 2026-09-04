@@ -60,7 +60,7 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def project_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def find_raster(root: Path, date_text: str, explicit: str | None) -> Path:

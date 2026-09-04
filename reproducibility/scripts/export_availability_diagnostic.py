@@ -15,7 +15,7 @@ SOURCES = ("modis", "s2", "hls", "s1_period")
 
 
 def project_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def output_root(period_label: str) -> Path:

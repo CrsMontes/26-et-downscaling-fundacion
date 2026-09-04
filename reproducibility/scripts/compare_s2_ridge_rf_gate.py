@@ -23,7 +23,7 @@ MANGROVE_STATION = "ST04"
 
 
 def project_root():
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def load_oof(root):

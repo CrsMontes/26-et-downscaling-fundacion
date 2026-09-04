@@ -14,7 +14,7 @@ KEYS = ["station_id", "period_start"]
 
 
 def project_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def availability_root(period_label: str) -> Path:

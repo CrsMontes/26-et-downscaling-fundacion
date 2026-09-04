@@ -228,7 +228,7 @@ def oof_predictions(data: pd.DataFrame, split_column: str) -> tuple[pd.DataFrame
 
 
 def main() -> None:
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     input_path = locate_input(root)
     store = load_store(input_path)
     data = build_population(store)

@@ -14,7 +14,7 @@ EXPECTED_CONTEXT = ("2020-01-01", "2025-01-01", "2020_2024")
 
 
 def project_root():
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def output_root(period_label):

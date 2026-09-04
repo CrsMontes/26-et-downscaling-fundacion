@@ -183,7 +183,7 @@ def predict_ee(
 
 def main() -> None:
     args = parse_arguments()
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
     model_directory = get_model_directory(project_root)
 
     model, specification, population = load_artifacts(model_directory)

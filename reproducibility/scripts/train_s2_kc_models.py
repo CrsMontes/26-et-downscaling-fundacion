@@ -243,7 +243,7 @@ def run_spatial_validation(candidate: pd.DataFrame):
 
 
 def main():
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
     input_path = (
         project_root
         / "outputs"

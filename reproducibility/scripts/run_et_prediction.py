@@ -411,7 +411,7 @@ def start_drive_export(
 
 def main():
     args = parse_arguments()
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
 
     ee.Initialize(project=args.project)
     ee.Number(1).getInfo()

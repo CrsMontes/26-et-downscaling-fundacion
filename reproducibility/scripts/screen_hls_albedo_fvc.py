@@ -24,7 +24,7 @@ CONFIGURATIONS = {
 ALGORITHMS = ("random_forest", "extra_trees")
 
 
-def project_root(): return Path(__file__).resolve().parents[1]
+def project_root(): return Path(__file__).resolve().parents[2]
 
 
 def load_data():

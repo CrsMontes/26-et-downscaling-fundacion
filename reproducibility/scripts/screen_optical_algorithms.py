@@ -384,7 +384,7 @@ def build_manifest(data, folds):
 
 
 def main():
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
     data, folds, experiment = load_inputs(project_root)
     validate_folds(data, folds)
     oof, plausibility = evaluate(data, folds)

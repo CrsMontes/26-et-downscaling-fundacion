@@ -14,7 +14,7 @@ import pandas as pd
 
 
 def project_root():
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def output_root(label):

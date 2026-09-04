@@ -27,7 +27,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "outputs/diagnostics/2020_2024/predictor_availability_ladder"
 FEATURE_STORE = (
     ROOT / "outputs/diagnostics/2020_2024/experimental_feature_store/feature_store.csv"

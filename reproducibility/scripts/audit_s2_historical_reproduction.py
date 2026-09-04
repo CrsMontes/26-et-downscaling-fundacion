@@ -23,7 +23,7 @@ TOLERANCES = (0, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 0.005, 0.01)
 
 
 def root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def output_dir() -> Path:

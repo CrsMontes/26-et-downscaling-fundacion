@@ -16,13 +16,13 @@ START_DATE = "2020-01-01"
 END_DATE_EXCLUSIVE = "2025-01-01"
 EXPECTED_ROWS = 1150
 
-SOURCE_DIRECTORY = Path(__file__).resolve().parents[1] / "src"
+SOURCE_DIRECTORY = Path(__file__).resolve().parents[2] / "src"
 if str(SOURCE_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(SOURCE_DIRECTORY))
 
 
 def project_root():
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def output_root():

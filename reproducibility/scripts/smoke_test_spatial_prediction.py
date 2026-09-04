@@ -402,7 +402,7 @@ def build_smoke_geometry() -> tuple[ee.Geometry, ee.Geometry]:
 
 def main():
     args = parse_arguments()
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
     paths = get_paths(project_root)
     require_matching_period_metadata(paths["metadata"], ANALYSIS_PERIOD)
 

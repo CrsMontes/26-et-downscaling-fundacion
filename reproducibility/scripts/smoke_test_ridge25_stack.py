@@ -67,7 +67,7 @@ def main() -> None:
     if args.sample_size < 1:
         raise ValueError("--sample-size must be at least 1.")
 
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
     path = model_path(project_root)
     if not path.is_file():
         raise FileNotFoundError(f"Ridge-25 model not found: {path}")

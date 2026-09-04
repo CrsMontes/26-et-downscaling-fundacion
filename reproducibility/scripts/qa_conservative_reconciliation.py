@@ -63,7 +63,7 @@ def parse_arguments():
 
 
 def get_project_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def station_collection(station_ids: list[str]) -> ee.FeatureCollection:

@@ -50,7 +50,7 @@ FIELD_RECORDING_RESOLUTION_MM = 1.0
 
 
 def get_project_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def get_paths(project_root: Path) -> dict[str, Path]:
