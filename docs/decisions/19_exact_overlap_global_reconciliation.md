@@ -2,11 +2,10 @@
 
 ## Status
 
-Accepted as the final reconciliation design after the 2022-04-07 diagnostic.
-The exact-overlap production path is now wired as a separate module while the
-previous iterative rasterio reconciliation remains in the repository only as
-a diagnostic/legacy path. End-to-end acceptance still requires the 2022-04-07
-production QA and the repeated spatial-OOF field comparison.
+Accepted and end-to-end tested as the final reconciliation design. The
+exact-overlap production path is wired through `ridge25_overlap_production.py`.
+The previous iterative rasterio reconciliation remains only as legacy
+reproducibility code and is not used by the default pipeline.
 
 ## Problem
 
@@ -117,3 +116,23 @@ Do not reopen Ridge vs RF, predictors, AOA or the 90% support threshold unless a
 separate scientific result requires it. Production is wired through
 `ridge25_overlap_production.py`; next steps are limited to one 2022-04-07
 end-to-end QA, repeated field OOF evaluation, and the manuscript.
+
+## End-to-end acceptance
+
+For 2022-04-07, the final production run generated
+`ridge25_exact_overlap_support90_tol001_v2` with:
+
+- 9,712 eligible MODIS parents;
+- 5,254,777 active fine cells;
+- 2,689,936 published basin pixels;
+- 14 negative active cells before the one-time zero floor;
+- maximum exact-overlap error before floor: 2.56e-13 mm;
+- maximum exact-overlap error after floor: 0.000701 mm;
+- MAE adjustment from the initial fine field: 0.1201 mm;
+- Pearson final versus initial: 0.999905.
+
+The repeated spatial-OOF field comparison produced 13 published pairs. The
+fixed-Kc main subset (ST01-ST03, n=10) showed mixed results: RMSE changed from
+9.034 mm for MODIS to 8.746 mm for the downscaled product, while MAE changed
+from 6.910 to 7.436 mm and KGE from 0.282 to 0.261. Therefore, the field data
+do not support a claim of consistent accuracy improvement over MODIS.

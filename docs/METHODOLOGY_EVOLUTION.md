@@ -26,9 +26,12 @@ The accepted primary model is:
   variables and four temporal harmonics;
 - primary validation: leave-one-spatial-block-out;
 - complementary temporal validation: leave-one-year-out;
-- prediction grid: 20 m;
-- conservative MODIS reconciliation: three passes, applied only after
-  fine-resolution prediction.
+- prediction grid: regular 20 m UTM cells;
+- conservative MODIS reconciliation: one global exact-overlap constrained
+  projection after the raw 20 m support mosaic, using the native spherical
+  MODIS sinusoidal grid;
+- publication support: complete stack, inside AOA, `Kc_raw >= 0`, and >=90%
+  usable support within an eligible MODIS parent.
 
 For the accepted 2020-2024 reference population, the expected gate is 799 rows.
 The reference spatial OOF result is approximately R2 = 0.380 and
@@ -44,3 +47,21 @@ run-specific provenance artifacts.
 The complete master dataset remains richer than the production model so that
 the evidence behind predictor exclusions can be reproduced without repeating
 all remote extraction.
+
+## Final reconciliation and field comparison (September 2026)
+
+The earlier iterative `average -> nearest` raster reconciliation was rejected
+after a 2022-04-07 audit showed strong local distortion and a local MODIS grid
+correspondence error. Decision 19 replaced it with a single global
+area-overlap reconciliation. The accepted production version is
+`ridge25_exact_overlap_support90_tol001_v2`.
+
+The 2022-04-07 end-to-end product passed the 0.01 mm conservation tolerance
+after flooring 14 tiny negative active cells once to zero; the maximum final
+conservation error was 0.000701 mm.
+
+The spatial-OOF field comparison yielded 13 publishable fine observations. In
+the fixed-Kc main subset (ST01-ST03, n=10), MODIS RMSE was 9.034 mm per period
+and exact-overlap Ridge-25 RMSE was 8.746 mm. Other metrics were mixed, so the
+field data do not demonstrate a consistent accuracy improvement over MODIS.
+No independent 20 m validation is claimed.

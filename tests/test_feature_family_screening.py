@@ -9,10 +9,10 @@ import unittest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+sys.path.insert(0, str(PROJECT_ROOT / "reproducibility" / "scripts"))
 SPEC = importlib.util.spec_from_file_location(
     "screen_feature_families",
-    PROJECT_ROOT / "scripts" / "screen_feature_families.py",
+    PROJECT_ROOT / "reproducibility" / "scripts" / "screen_feature_families.py",
 )
 SCREENING = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SCREENING)

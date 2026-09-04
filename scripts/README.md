@@ -1,66 +1,36 @@
-﻿# Scripts
+# Operational scripts
 
-The repository contains both the operational ET downscaling workflow and
-scripts retained to reproduce methodological experiments.
+This directory contains only the current user-facing workflow.
 
-## Operational workflow
+## Production
 
-The normal entry point is:
+Normal entry point:
 
-    python scripts/run_pipeline.py
+    python scripts/run_pipeline.py --project <earth-engine-project>
 
-The operational pipeline orchestrates:
+The production pipeline orchestrates:
 
 - `export_meteorology_data.py`
 - `export_satellite_data.py`
 - `build_training_dataset.py`
-- final Ridge-25 fitting, AOA construction and local 20 m production.
-
-These scripts define the current production workflow.
+- Ridge-25 fitting and blocked validation
+- Ridge-25 AOA reconstruction
+- exact-overlap 20 m ET production when a raster date is requested
 
 ## Field evaluation
 
-The following scripts are retained for the independent field-evaluation phase:
+The current spatial-OOF field comparison is:
 
-- `validate_field_downscaling.py`
-- `analyze_field_diagnostics.py`
+    python scripts/evaluate_field_ridge25.py --project <earth-engine-project>
 
-They are not part of routine raster production.
+Field observations are used only for the separate comparison phase and do not
+constitute independent validation of the full 20 m raster domain.
 
-## Reproducibility scripts
+## Historical and experimental scripts
 
-All remaining scripts reproduce diagnostics, screening experiments or
-superseded methodological alternatives used to reach the final method.
+Scripts used to reach methodological decisions are not mixed with operational
+commands. They are retained under:
 
-Examples include:
+    reproducibility/scripts/
 
-- S2 versus HLS experiments;
-- Ridge versus Random Forest comparisons;
-- predictor-family screening and ablations;
-- FVC and albedo experiments;
-- Sentinel-1 and LST availability experiments;
-- coverage-threshold sensitivity;
-- AOA and fine-scale information diagnostics;
-- historical and alternative reconciliation tests;
-- production smoke tests.
-
-These scripts are intentionally retained as scientific provenance.
-
-They are NOT executed by `run_pipeline.py` unless explicitly called by a user.
-
-See:
-
-    reproducibility/script_manifest.md
-    docs/decisions/
-
-for the complete classification and the scientific decisions supported by
-these experiments.
-
-## Reproducibility policy
-
-A rejected predictor, model or workflow is not deleted solely because it was
-not selected. Negative results and superseded alternatives are preserved when
-they provide evidence for a methodological decision.
-
-The Git history provides additional provenance but is not used as a substitute
-for executable scientific evidence.
+See `reproducibility/script_manifest.md` and `docs/decisions/README.md`.

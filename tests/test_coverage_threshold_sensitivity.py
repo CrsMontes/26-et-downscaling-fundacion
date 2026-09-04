@@ -9,10 +9,10 @@ import unittest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+sys.path.insert(0, str(PROJECT_ROOT / "reproducibility" / "scripts"))
 SPEC = importlib.util.spec_from_file_location(
     "evaluate_coverage_threshold_sensitivity",
-    PROJECT_ROOT / "scripts" / "evaluate_coverage_threshold_sensitivity.py",
+    PROJECT_ROOT / "reproducibility" / "scripts" / "evaluate_coverage_threshold_sensitivity.py",
 )
 SENSITIVITY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SENSITIVITY)

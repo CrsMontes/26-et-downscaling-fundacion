@@ -13,7 +13,7 @@ from sklearn.pipeline import Pipeline
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
     "screen_optical_algorithms",
-    PROJECT_ROOT / "scripts" / "screen_optical_algorithms.py",
+    PROJECT_ROOT / "reproducibility" / "scripts" / "screen_optical_algorithms.py",
 )
 SCREENING = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SCREENING)

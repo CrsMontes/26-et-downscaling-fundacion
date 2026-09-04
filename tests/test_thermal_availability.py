@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_script(filename):
-    path = ROOT / "scripts" / filename
+    path = ROOT / "reproducibility" / "scripts" / filename
     spec = importlib.util.spec_from_file_location(path.stem, path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[path.stem] = module

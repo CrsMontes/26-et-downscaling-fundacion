@@ -409,13 +409,13 @@ def main():
     if not paths["aoa"].is_file():
         raise FileNotFoundError(
             f"AOA specification not found: {paths['aoa']}\n"
-            "Run first: python scripts/train_s2_kc_models.py"
+            "Run first: python reproducibility/scripts/train_s2_kc_models.py"
         )
 
     if not paths["model"].is_file():
         raise FileNotFoundError(
             f"Production model not found: {paths['model']}\n"
-            "Run first: python scripts/train_s2_kc_models.py"
+            "Run first: python reproducibility/scripts/train_s2_kc_models.py"
         )
     if not paths["training"].is_file():
         raise FileNotFoundError(

@@ -9,7 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
-    "export_hls_albedo_fvc", ROOT / "scripts" / "export_hls_albedo_fvc.py"
+    "export_hls_albedo_fvc", ROOT / "reproducibility" / "scripts" / "export_hls_albedo_fvc.py"
 )
 EXPORT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(EXPORT)

@@ -229,8 +229,8 @@ def require_inputs(paths: dict[str, Path]) -> None:
         raise FileNotFoundError(
             "Missing required inputs:\n"
             + "\n".join(missing)
-            + "\nRun scripts/analyze_field_diagnostics.py and "
-            "scripts/train_s2_kc_models.py first."
+            + "\nRun reproducibility/scripts/analyze_field_diagnostics.py and "
+            "reproducibility/scripts/train_s2_kc_models.py first."
         )
 
 
@@ -484,7 +484,7 @@ def rebuild_training_candidate(
     from that round-tripped artifact can change a small number of tree splits.
     For exact OOF reconstruction, start again from the canonical training master
     and apply the same harmonic, candidate and spatial-block transformations as
-    scripts/train_s2_kc_models.py.
+    reproducibility/scripts/train_s2_kc_models.py.
     """
     result = master.copy()
 

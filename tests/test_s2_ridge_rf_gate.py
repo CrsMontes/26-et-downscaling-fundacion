@@ -6,7 +6,7 @@ import pandas as pd
 
 
 def load_script():
-    path = Path(__file__).resolve().parents[1] / "scripts/compare_s2_ridge_rf_gate.py"
+    path = Path(__file__).resolve().parents[1] / "reproducibility/scripts/compare_s2_ridge_rf_gate.py"
     spec = importlib.util.spec_from_file_location("ridge_rf_gate", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

@@ -64,7 +64,7 @@ architecture. Interpret the RF as a model of relative subpixel heterogeneity.
 Do not claim independent validation of absolute ET at 20 m.
 
 Boundary discontinuities, fill behavior, AOA, and conservation are mandatory
-QA dimensions. `scripts/qa_conservative_reconciliation.py` persists the
+QA dimensions. `reproducibility/scripts/qa_conservative_reconciliation.py` persists the
 bounded fill and multi-parent conservation gate. A change to cross-boundary
 blending or another conservation operator is a substantive methodological
 change and is outside this decision.

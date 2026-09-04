@@ -9,10 +9,10 @@ import unittest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+sys.path.insert(0, str(PROJECT_ROOT / "reproducibility" / "scripts"))
 SPEC = importlib.util.spec_from_file_location(
     "audit_ridge_fine_information",
-    PROJECT_ROOT / "scripts" / "audit_ridge_fine_information.py",
+    PROJECT_ROOT / "reproducibility" / "scripts" / "audit_ridge_fine_information.py",
 )
 AUDIT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(AUDIT)

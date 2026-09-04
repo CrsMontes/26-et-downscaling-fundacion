@@ -1187,8 +1187,8 @@ def main():
 
     inputs = [FEATURE_STORE, LST_TABLE, LST_MANIFEST, FVC_CONFIG]
     scripts = [
-        ROOT / "scripts/run_predictor_availability_ladder.py",
-        ROOT / "scripts/export_landsat_lst_predictor.py",
+        ROOT / "reproducibility/scripts/run_predictor_availability_ladder.py",
+        ROOT / "reproducibility/scripts/export_landsat_lst_predictor.py",
         ROOT / "src/et_downscaling/landsat_lst_predictor.py",
         ROOT / "src/et_downscaling/thermal_availability.py",
     ]

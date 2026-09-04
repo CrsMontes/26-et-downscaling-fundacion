@@ -13,7 +13,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
     "build_experimental_feature_store",
-    PROJECT_ROOT / "scripts" / "build_experimental_feature_store.py",
+    PROJECT_ROOT / "reproducibility" / "scripts" / "build_experimental_feature_store.py",
 )
 FEATURE_STORE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(FEATURE_STORE)

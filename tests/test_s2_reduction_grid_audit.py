@@ -9,7 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 SPEC = importlib.util.spec_from_file_location(
-    "grid_audit", ROOT / "scripts/audit_s2_reduction_grid.py"
+    "grid_audit", ROOT / "reproducibility/scripts/audit_s2_reduction_grid.py"
 )
 GRID = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GRID)

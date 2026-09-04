@@ -9,8 +9,8 @@ import pandas as pd
 
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-SPEC = importlib.util.spec_from_file_location("s2_audit", ROOT / "scripts/audit_s2_historical_reproduction.py")
+sys.path.insert(0, str(ROOT / "reproducibility" / "scripts"))
+SPEC = importlib.util.spec_from_file_location("s2_audit", ROOT / "reproducibility/scripts/audit_s2_historical_reproduction.py")
 AUDIT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(AUDIT)
 

@@ -34,17 +34,27 @@ Publication requires:
 - `Kc_raw >= 0`;
 - usable support fraction >= 0.90 within the native MODIS parent.
 
-For eligible MODIS parents, non-publishable support up to 10% is filled
-internally only for mass conservation. This fill is never published.
+For eligible MODIS parents, the final product uses one global exact-overlap
+reconciliation after the raw 20 m support mosaic has been assembled. Real
+intersection areas between the 20 m UTM grid and the native MODIS sinusoidal
+grid define the coarse-support constraints. No coarse-to-fine nearest-neighbour
+correction and no arbitrary reconciliation iterations are used.
 
-Local iterative reconciliation continues until the maximum absolute
-parent-level conservation error is <= 0.01 mm per MODIS period, with a maximum
-of 30 iterations.
+Small negative ET values produced by the unconstrained global projection are
+floored once to zero. The date is accepted only if the exact-overlap
+conservation error remains <= 0.01 mm per MODIS period. Production uses fixed
+4000 m raw-support tiles plus an external halo, followed by one global
+reconciliation and final basin clipping.
 
-Production uses fixed 4000 m tile cores and a 1000 m processing buffer.
-Recursive subdivision is not part of the accepted production method.
+The accepted production version is
+`ridge25_exact_overlap_support90_tol001_v2`.
 
-No independent validation at 20 m is claimed.
+Field comparison is a separate evaluation, not a validation of the complete
+20 m raster domain. In the current fixed-Kc main subset (ST01-ST03, n=10),
+MODIS and the downscaled product show similar overall error: RMSE 9.034 versus
+8.746 mm per period, respectively. The downscaled product does not show a
+consistent accuracy improvement across metrics or stations. No independent
+20 m validation claim is made.
 ## Run
 
 Create the environment and install the repository in editable mode, then:

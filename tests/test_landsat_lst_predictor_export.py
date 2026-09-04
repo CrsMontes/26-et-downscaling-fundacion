@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def load_script():
-    path = Path(__file__).resolve().parents[1] / "scripts/export_landsat_lst_predictor.py"
+    path = Path(__file__).resolve().parents[1] / "reproducibility/scripts/export_landsat_lst_predictor.py"
     spec = importlib.util.spec_from_file_location("lst_predictor_export", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

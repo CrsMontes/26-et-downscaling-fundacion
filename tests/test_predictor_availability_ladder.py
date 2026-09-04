@@ -8,7 +8,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts/run_predictor_availability_ladder.py"
+SCRIPT = ROOT / "reproducibility/scripts/run_predictor_availability_ladder.py"
 SPEC = importlib.util.spec_from_file_location("predictor_availability_ladder", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE

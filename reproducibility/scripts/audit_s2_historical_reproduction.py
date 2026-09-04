@@ -279,8 +279,8 @@ def run() -> dict:
         "current_only": int((~paired.historical_eligible & paired.current_eligible).sum()),
         "neither": int((~paired.historical_eligible & ~paired.current_eligible).sum()),
     }
-    script_paths = [root()/"scripts/export_fvc_calibration_candidates.py",
-                    root()/"scripts/analyze_fvc_candidate_stability.py",
+    script_paths = [root()/"reproducibility/scripts/export_fvc_calibration_candidates.py",
+                    root()/"reproducibility/scripts/analyze_fvc_candidate_stability.py",
                     root()/"src/et_downscaling/sentinel2.py",
                     root()/"src/et_downscaling/spatial.py"]
     hashes = [{"kind": "historical_git_blob", "path": HISTORICAL_PATH,
