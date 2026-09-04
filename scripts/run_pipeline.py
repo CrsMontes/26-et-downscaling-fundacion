@@ -25,6 +25,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pandas as pd
+
 import et_downscaling
 
 
@@ -197,6 +199,194 @@ def run_script(
         input=stdin_text,
         env=os.environ.copy(),
     )
+
+
+def run_repro_script(
+    project_root: Path,
+    script_name: str,
+    arguments: list[str],
+) -> None:
+    command = [
+        sys.executable,
+        str(
+            project_root
+            / "reproducibility"
+            / "scripts"
+            / script_name
+        ),
+        *arguments,
+    ]
+
+    print()
+    print(
+        ">",
+        " ".join(command),
+    )
+
+    subprocess.run(
+        command,
+        cwd=project_root,
+        check=True,
+        text=True,
+        env=os.environ.copy(),
+    )
+
+
+def build_or_reuse_candidate_master(
+    project_root: Path,
+    workspace,
+    args,
+    project_id: str,
+):
+    master_path = (
+        workspace.master
+        / "master_predictor_store.parquet"
+    )
+
+    rebuild = (
+        args.refresh_raw
+        or not master_path.is_file()
+    )
+
+    if not rebuild:
+        print()
+        print("=== CANONICAL CANDIDATE MASTER ===")
+        print("Reusing:", master_path)
+
+        master = pd.read_parquet(
+            master_path,
+        )
+
+        print(
+            "Candidate-master rows:",
+            len(master),
+        )
+        print(
+            "Candidate-master columns:",
+            len(master.columns),
+        )
+        return master
+
+    if (
+        args.start_date != CANONICAL_START_DATE
+        or args.end_date_exclusive
+        != CANONICAL_END_DATE_EXCLUSIVE
+    ):
+        raise RuntimeError(
+            "The canonical training master is frozen to "
+            "2020-01-01 through 2024-12-31."
+        )
+
+    print()
+    print("=== COMPLETE CANDIDATE ACQUISITION ===")
+
+    common_arguments = [
+        "--start-date",
+        args.start_date,
+        "--end-date-exclusive",
+        args.end_date_exclusive,
+        "--period-label",
+        "2020_2024",
+        "--project",
+        project_id,
+        "--execute",
+    ]
+
+    # Availability and paired optical support.
+    run_repro_script(
+        project_root,
+        "export_availability_diagnostic.py",
+        common_arguments,
+    )
+    run_repro_script(
+        project_root,
+        "export_optical_source_experiment.py",
+        common_arguments,
+    )
+
+    # Row-preserving population and reference-ET support.
+    run_repro_script(
+        project_root,
+        "build_optical_source_populations.py",
+        [],
+    )
+    run_repro_script(
+        project_root,
+        "build_meteorology_experiment_table.py",
+        [],
+    )
+
+    # Candidate predictor families retained for reproducibility.
+    run_repro_script(
+        project_root,
+        "export_s2_rich_optical.py",
+        common_arguments,
+    )
+    run_repro_script(
+        project_root,
+        "export_s1_geometry_predictors.py",
+        common_arguments,
+    )
+    run_repro_script(
+        project_root,
+        "export_thermal_availability.py",
+        common_arguments,
+    )
+    run_repro_script(
+        project_root,
+        "export_hls_albedo_fvc.py",
+        common_arguments,
+    )
+
+    # Approved Landsat-LST predictor uses its frozen configuration.
+    run_repro_script(
+        project_root,
+        "export_landsat_lst_predictor.py",
+        [
+            "--project",
+            project_id,
+            "--execute",
+        ],
+    )
+
+    print()
+    print("=== CANDIDATE FEATURE STORE ===")
+
+    run_repro_script(
+        project_root,
+        "build_experimental_feature_store.py",
+        [],
+    )
+
+    # Assemble the master only. Do not run the sensitivity ladder here.
+    run_script(
+        project_root,
+        "build_candidate_master.py",
+        [],
+    )
+
+    if not master_path.is_file():
+        raise FileNotFoundError(
+            "Canonical candidate master was not created:\n"
+            f"{master_path}"
+        )
+
+    master = pd.read_parquet(
+        master_path,
+    )
+
+    print()
+    print("=== CANONICAL CANDIDATE MASTER ===")
+    print(
+        "Candidate-master rows:",
+        len(master),
+    )
+    print(
+        "Candidate-master columns:",
+        len(master.columns),
+    )
+
+    return master
 
 
 def ask_yes_no(
@@ -392,32 +582,16 @@ def main() -> None:
         project_id=project_id,
     )
 
-    print()
-    print("=== CANONICAL CANDIDATE MASTER ===")
-
     master_path = (
         workspace.master
         / "master_predictor_store.parquet"
     )
 
-    if not master_path.is_file():
-        raise FileNotFoundError(
-            "Canonical candidate master was not found:\n"
-            f"{master_path}\n"
-            "Build the complete candidate master before final training."
-        )
-
-    master = pd.read_parquet(
-        master_path,
-    )
-
-    print(
-        "Candidate-master rows:",
-        len(master),
-    )
-    print(
-        "Candidate-master columns:",
-        len(master.columns),
+    master = build_or_reuse_candidate_master(
+        project_root=project_root,
+        workspace=workspace,
+        args=args,
+        project_id=project_id,
     )
 
     verify_reference = (
