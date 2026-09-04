@@ -16,3 +16,5 @@ dependencies:
   - ipykernel
   - pytest
   - pip
+  - pip:
+      - pyarrow==25.0.0

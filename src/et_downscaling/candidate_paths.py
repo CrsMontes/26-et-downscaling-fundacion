@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from .config import build_satellite_output_filename
 from .workspace import get_workspace_paths
 
 
@@ -24,6 +25,7 @@ class CandidateStudyPaths:
     master_store: Path
     sensitivity_root: Path
     station_support: Path
+    operational_s2_table: Path
 
     @property
     def optical_root(self) -> Path:
@@ -70,4 +72,10 @@ def get_candidate_study_paths(project_root: Path) -> CandidateStudyPaths:
         master_store=workspace.master / "master_predictor_store.parquet",
         sensitivity_root=workspace.diagnostics / "sensitivity" / CANDIDATE_PERIOD_LABEL,
         station_support=workspace.raw_cache / "meteorology" / "station_support.csv",
+        operational_s2_table=(
+            workspace.raw_cache
+            / "satellite"
+            / "S2"
+            / build_satellite_output_filename("S2")
+        ),
     ).ensure()

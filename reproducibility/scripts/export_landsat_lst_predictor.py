@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+
 START_DATE = "2020-01-01"
 END_DATE_EXCLUSIVE = "2025-01-01"
 EXPECTED_ROWS = 1150
@@ -20,17 +21,15 @@ SOURCE_DIRECTORY = Path(__file__).resolve().parents[2] / "src"
 if str(SOURCE_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(SOURCE_DIRECTORY))
 
+from et_downscaling.candidate_paths import get_candidate_study_paths
+
 
 def project_root():
     return Path(__file__).resolve().parents[2]
 
 
 def output_root():
-    return (
-        project_root()
-        / "outputs/diagnostics/2020_2024/predictor_availability_ladder"
-        / "raw/landsat_lst"
-    )
+    return get_candidate_study_paths(project_root()).landsat_lst_root
 
 
 def sha256_file(path):
@@ -108,7 +107,8 @@ def adaptive_export(
         return [path]
     try:
         table = builder(modis_inputs, collection, start, end)
-        relative = path.relative_to(project_root() / "outputs")
+        workspace_root = get_candidate_study_paths(project_root()).workspace_root
+        relative = path.relative_to(workspace_root)
         result = Path(exporter(table, str(relative), selectors))
         records.append({
             "start": start, "end_exclusive": end,
@@ -200,7 +200,7 @@ def main(argv=None):
         "configuration": method_manifest(),
         "executed_partitions": records,
         "rows": rows,
-        "output": str(output.relative_to(project_root())),
+        "output": str(output),
         "output_sha256": sha256_file(output),
         "training_performed": False,
     }

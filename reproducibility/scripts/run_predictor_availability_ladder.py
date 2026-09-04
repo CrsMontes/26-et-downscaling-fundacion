@@ -50,6 +50,14 @@ S2_RED_EDGE = [
     "s2_RedEdge1_mean", "s2_RedEdge2_mean", "s2_RedEdge3_mean",
     "s2_NIR_Broad_mean", "s2_NDRE_mean",
 ]
+
+# Production-aligned Sentinel-2 values are preserved separately from the
+# sensitivity S2 representation. These are the exact values used by the
+# frozen Ridge25 workflow (EPSG:32618, 20 m reduction grid).
+PRODUCTION_S2 = [
+    name.removeprefix("s2_")
+    for name in (S2_COMMON + S2_RED_EDGE)
+]
 S2_DERIVED = ["s2_Albedo_mean", "s2_FVC_mean"]
 S1_R077 = [
     "r077_VV_dB_mean", "r077_VH_dB_mean", "r077_VV_minus_VH_dB_mean",
@@ -162,7 +170,50 @@ def build_master_store():
     master = store.merge(lst, on=KEYS, how="left", validate="one_to_one")
     if len(master) != EXPECTED_MASTER_ROWS or master[KEYS].isna().any().any():
         raise RuntimeError("The Landsat join changed or invalidated master keys")
-    for predictor in CANDIDATES:
+
+    production_s2 = normalized_keys(
+        pd.read_csv(
+            PATHS.operational_s2_table,
+            dtype={"station_id": str, "modis_pixel_id": str},
+        ),
+        "operational Sentinel-2 table",
+    )
+
+    if len(production_s2) != EXPECTED_MASTER_ROWS:
+        raise RuntimeError(
+            "Expected 1,150 rows in operational Sentinel-2; "
+            f"found {len(production_s2)}"
+        )
+
+    missing_production_s2 = sorted(
+        set(PRODUCTION_S2) - set(production_s2.columns)
+    )
+    if missing_production_s2:
+        raise RuntimeError(
+            "Operational Sentinel-2 is missing final Ridge25 predictors: "
+            f"{missing_production_s2}"
+        )
+
+    conflicts = sorted(set(PRODUCTION_S2).intersection(master.columns))
+    if conflicts:
+        raise RuntimeError(
+            "Canonical master already contains production-aligned S2 columns: "
+            f"{conflicts}"
+        )
+
+    master = master.merge(
+        production_s2[KEYS + PRODUCTION_S2],
+        on=KEYS,
+        how="left",
+        validate="one_to_one",
+    )
+
+    if len(master) != EXPECTED_MASTER_ROWS:
+        raise RuntimeError(
+            "Operational Sentinel-2 join changed the master population"
+        )
+
+    for predictor in CANDIDATES + PRODUCTION_S2:
         master[predictor] = pd.to_numeric(master[predictor], errors="coerce")
         master.loc[master[predictor] <= -9990, predictor] = np.nan
     target_numeric = [
@@ -1183,7 +1234,13 @@ def main():
     )
     (OUTPUT / "REPORT.md").write_text(report, encoding="utf-8")
 
-    inputs = [FEATURE_STORE, LST_TABLE, LST_MANIFEST, FVC_CONFIG]
+    inputs = [
+        FEATURE_STORE,
+        LST_TABLE,
+        LST_MANIFEST,
+        PATHS.operational_s2_table,
+        FVC_CONFIG,
+    ]
     scripts = [
         ROOT / "reproducibility/scripts/run_predictor_availability_ladder.py",
         ROOT / "reproducibility/scripts/export_landsat_lst_predictor.py",
