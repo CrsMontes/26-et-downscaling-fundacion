@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from et_downscaling.candidate_paths import get_candidate_study_paths
+
 
 EXPECTED_CONTEXT = ("2020-01-01", "2025-01-01", "2020_2024")
 PREDICTORS = ("Albedo", "FVC")
@@ -33,7 +35,7 @@ def project_root():
 def output_root(label):
     if label != "2020_2024":
         raise ValueError("Only the approved 2020_2024 label is allowed")
-    return project_root() / "outputs" / "diagnostics" / label / "hls_albedo_fvc"
+    return get_candidate_study_paths(project_root()).hls_albedo_fvc_root
 
 
 def parse_arguments(argv=None):
@@ -151,7 +153,8 @@ def adaptive_export(builder, start, end, destination, exporter, records):
         records.append({"start": start, "end_exclusive": end, "status": "reused"})
         return [path]
     try:
-        relative = path.relative_to(project_root() / "outputs")
+        workspace_root = get_candidate_study_paths(project_root()).workspace_root
+        relative = path.relative_to(workspace_root)
         result = exporter(builder(start, end), relative.as_posix(), EXPORT_SELECTORS)
         records.append({"start": start, "end_exclusive": end, "status": "downloaded"})
         return [Path(result)]

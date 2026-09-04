@@ -93,6 +93,11 @@ def build_store(root):
     optical_root = paths.optical_root
     optical_path = optical_root / "raw" / "paired_optical_common.csv"
     rich_path = optical_root / "raw" / "s2_rich_optical.csv"
+    hls_derived_path = (
+        paths.hls_albedo_fvc_root
+        / "raw"
+        / "hls_albedo_fvc.csv"
+    )
     s1_path = diagnostic / "s1_geometry_experiment" / "raw" / "s1_geometry_predictors.csv"
     thermal_path = diagnostic / "thermal_availability" / "raw" / "landsat_lst_station_period.csv"
     meteorology_path = diagnostic / "meteorology_experiment" / "processed" / "period_meteorology.csv"
@@ -127,6 +132,20 @@ def build_store(root):
             raise RuntimeError(f"S2 common conflict between local tables: {column}")
     rich_extras = [f"s2_{name}_mean" for name in S2_EXTRAS]
     store = left_join(store, rich[KEYS + rich_extras], "S2 rich join")
+
+    hls_derived = read_unique(
+        hls_derived_path,
+        "HLS Albedo/FVC table",
+    )
+    hls_derived_columns = [
+        "hls_Albedo_mean",
+        "hls_FVC_mean",
+    ]
+    store = left_join(
+        store,
+        hls_derived[KEYS + hls_derived_columns],
+        "HLS Albedo/FVC join",
+    )
 
     s1 = read_unique(s1_path, "S1 geometry predictors")
     s1_columns = [column for column in s1.columns if column.startswith(("r077_", "r142_"))]
@@ -188,6 +207,7 @@ def build_store(root):
     predictor_columns = (
         [f"s2_{name}_mean" for name in COMMON_OPTICAL + S2_EXTRAS]
         + [f"hls_{name}_mean" for name in COMMON_OPTICAL]
+        + ["hls_Albedo_mean", "hls_FVC_mean"]
         + [f"r{orbit}_{name}" for orbit in ("077", "142") for name in (
             "VV_dB_mean", "VH_dB_mean", "VV_minus_VH_dB_mean"
         )]
@@ -252,10 +272,16 @@ def predictor_metadata():
     )
     add(
         ["hls_Albedo_mean", "hls_FVC_mean"], "HLS source-specific optical",
-        "NASA HLS S30 v2 + L30 v2", "30 m nominal", "Not materialized",
-        "Would follow combined HLS medoid", "", "implemented_not_materialized",
-        "candidate", False, "No current HLS wall-to-wall prediction pipeline", True,
-        "Code exists, but the 2020-2024 extraction contains only common11.",
+        "NASA HLS S30 v2 + L30 v2", "30 m nominal",
+        "Mean over MODIS footprint",
+        "Combined S30/L30 per-pixel temporal medoid",
+        "hls_albedo_fvc/raw/hls_albedo_fvc.csv",
+        "materialized_candidate",
+        "candidate",
+        False,
+        "No current HLS wall-to-wall prediction pipeline",
+        False,
+        "Source-specific HLS Albedo and recalibrated FVC preserved for sensitivity.",
     )
     for orbit, geometry in (("077", "ascending R077"), ("142", "descending R142")):
         add(

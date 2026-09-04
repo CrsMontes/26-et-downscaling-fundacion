@@ -51,6 +51,10 @@ class CandidateStudyPaths:
     def landsat_lst_root(self) -> Path:
         return self.raw_root / "predictor_availability_ladder" / "raw" / "landsat_lst"
 
+    @property
+    def hls_albedo_fvc_root(self) -> Path:
+        return self.raw_root / "hls_albedo_fvc"
+
     def ensure(self) -> "CandidateStudyPaths":
         for path in (
             self.raw_root,

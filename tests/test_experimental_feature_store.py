@@ -21,7 +21,7 @@ SPEC.loader.exec_module(FEATURE_STORE)
 
 class ExperimentalFeatureStoreTests(unittest.TestCase):
     def test_declared_materialized_predictor_count(self):
-        expected = 18 + 11 + 6 + 12 + 4 + 1
+        expected = 18 + 13 + 6 + 12 + 4 + 1
         metadata = FEATURE_STORE.predictor_metadata()
         materialized = [
             row for row in metadata
@@ -32,8 +32,6 @@ class ExperimentalFeatureStoreTests(unittest.TestCase):
     def test_nonmaterialized_candidates_are_explicit(self):
         metadata = {row["feature_name"]: row for row in FEATURE_STORE.predictor_metadata()}
         for feature in (
-            "hls_Albedo_mean",
-            "hls_FVC_mean",
             "landsat_l8_only_LST_K",
             "landsat_l8_l9_combined_LST_K",
             "terrain_slope",
