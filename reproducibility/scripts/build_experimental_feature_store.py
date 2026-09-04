@@ -12,6 +12,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from et_downscaling.candidate_paths import get_candidate_study_paths
+
 
 KEYS = ["station_id", "period_start"]
 EXPECTED_ROWS = 1150
@@ -86,16 +88,17 @@ def normalize_numeric_missing(store, columns):
 
 
 def build_store(root):
-    diagnostic = root / "outputs" / "diagnostics" / "2020_2024"
-    optical_root = diagnostic / "optical_source_experiment"
+    paths = get_candidate_study_paths(root)
+    diagnostic = paths.raw_root
+    optical_root = paths.optical_root
     optical_path = optical_root / "raw" / "paired_optical_common.csv"
     rich_path = optical_root / "raw" / "s2_rich_optical.csv"
     s1_path = diagnostic / "s1_geometry_experiment" / "raw" / "s1_geometry_predictors.csv"
     thermal_path = diagnostic / "thermal_availability" / "raw" / "landsat_lst_station_period.csv"
     meteorology_path = diagnostic / "meteorology_experiment" / "processed" / "period_meteorology.csv"
     master_path = optical_root / "population" / "paired_master.csv"
-    support_path = root / "outputs" / "raw" / "meteorology" / "station_support.csv"
-    availability_root = diagnostic / "availability" / "raw"
+    support_path = paths.station_support
+    availability_root = paths.availability_root / "raw"
 
     optical = read_unique(optical_path, "paired optical table")
     if len(optical) != EXPECTED_ROWS:
@@ -394,10 +397,8 @@ def main():
     root = project_root()
     store, predictor_columns = build_store(root)
     inventory = build_inventory(store, predictor_columns)
-    output = (
-        root / "outputs" / "diagnostics" / "2020_2024"
-        / "experimental_feature_store"
-    )
+    paths = get_candidate_study_paths(root)
+    output = paths.intermediate_root / "feature_store"
     output.mkdir(parents=True, exist_ok=True)
     store_path = output / "feature_store.csv"
     inventory_path = output / "feature_inventory.csv"

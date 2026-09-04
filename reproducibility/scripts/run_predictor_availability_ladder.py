@@ -19,6 +19,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import sklearn
+
+from et_downscaling.candidate_paths import get_candidate_study_paths
 from sklearn.base import clone
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import Ridge
@@ -28,15 +30,11 @@ from sklearn.preprocessing import StandardScaler
 
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUT = ROOT / "outputs/diagnostics/2020_2024/predictor_availability_ladder"
-FEATURE_STORE = (
-    ROOT / "outputs/diagnostics/2020_2024/experimental_feature_store/feature_store.csv"
-)
-LST_TABLE = OUTPUT / "raw/landsat_lst/landsat_lst_station_period.csv"
-LST_MANIFEST = OUTPUT / "raw/landsat_lst/landsat_lst_export_manifest.json"
-FINAL_GATE = (
-    ROOT / "outputs/diagnostics/2020_2024/s2_ridge_rf_final_gate_s2only_ge90"
-)
+PATHS = get_candidate_study_paths(ROOT)
+OUTPUT = PATHS.sensitivity_root / "predictor_availability_ladder"
+FEATURE_STORE = PATHS.intermediate_root / "feature_store" / "feature_store.csv"
+LST_TABLE = PATHS.landsat_lst_root / "landsat_lst_station_period.csv"
+LST_MANIFEST = PATHS.landsat_lst_root / "landsat_lst_export_manifest.json"
 FVC_CONFIG = ROOT / "config/fvc_endmembers.json"
 KEYS = ["station_id", "modis_pixel_id", "period_start"]
 EXPECTED_MASTER_ROWS = 1150
@@ -975,7 +973,7 @@ def main():
     if int(rungs[-1]["population_mask"].sum()) != EXPECTED_GE90_ROWS:
         raise RuntimeError("Availability ladder did not reach 799 observations")
 
-    master.to_parquet(OUTPUT / "master_predictor_store.parquet", index=False)
+    master.to_parquet(PATHS.master_store, index=False)
     registry.to_csv(OUTPUT / "predictor_registry.csv", index=False)
     availability_matrix.to_csv(OUTPUT / "availability_matrix.csv", index=False)
     availability_blocks.to_csv(OUTPUT / "availability_blocks.csv", index=False)
@@ -1205,11 +1203,11 @@ def main():
             "earth_engine_api": "1.7.38 (used only for Landsat LST extraction)",
         },
         "inputs": [
-            {"path": str(path.relative_to(ROOT)), "sha256": sha256_file(path)}
+            {"path": str(path), "sha256": sha256_file(path)}
             for path in inputs
         ],
         "scripts_used": [
-            {"path": str(path.relative_to(ROOT)), "sha256": sha256_file(path)}
+            {"path": str(path), "sha256": sha256_file(path)}
             for path in scripts
         ],
         "observation_key": KEYS,
