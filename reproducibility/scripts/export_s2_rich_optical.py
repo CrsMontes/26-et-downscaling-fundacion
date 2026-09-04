@@ -1,4 +1,4 @@
-﻿"""Export the rich Sentinel-2 optical predictor table for the Phase 3 experiment.
+"""Export the rich Sentinel-2 optical predictor table for the Phase 3 experiment.
 
 This diagnostic reuses the existing Sentinel-2 preprocessing, medoid,
 predictor definitions, MODIS footprints, and temporal periods.
@@ -15,6 +15,8 @@ from pathlib import Path
 import ee
 import numpy as np
 import pandas as pd
+
+from et_downscaling.candidate_paths import get_candidate_study_paths
 
 from et_downscaling.availability_diagnostic import (
     annual_partitions,
@@ -108,13 +110,9 @@ def project_root():
 
 
 def experiment_root(period_label):
-    return (
-        project_root()
-        / "outputs"
-        / "diagnostics"
-        / period_label
-        / "optical_source_experiment"
-    )
+    if period_label != "2020_2024":
+        raise ValueError("Only the approved 2020_2024 period is allowed")
+    return get_candidate_study_paths(project_root()).optical_root
 
 
 def mean_properties(image, geometry):

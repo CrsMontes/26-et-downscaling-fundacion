@@ -9,6 +9,8 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+from et_downscaling.candidate_paths import get_candidate_study_paths
+
 
 EXPECTED_CONTEXT = ("2020-01-01", "2025-01-01", "2020_2024")
 
@@ -20,7 +22,7 @@ def project_root():
 def output_root(period_label):
     if period_label != "2020_2024":
         raise ValueError("Only the approved 2020_2024 period label is allowed")
-    return project_root() / "outputs" / "diagnostics" / period_label / "thermal_availability"
+    return get_candidate_study_paths(project_root()).thermal_root
 
 
 def parse_arguments(argv=None):
@@ -80,7 +82,7 @@ def adaptive_export(*, builder, modis_inputs, collection, start, end,
         return [path]
     try:
         table = builder(modis_inputs, collection, start, end)
-        relative = path.relative_to(project_root() / "outputs")
+        relative = path.relative_to(get_candidate_study_paths(project_root()).workspace_root)
         result = Path(exporter(table, str(relative), selectors))
         records.append({"start": start, "end_exclusive": end,
                         "status": "downloaded", "path": str(result)})

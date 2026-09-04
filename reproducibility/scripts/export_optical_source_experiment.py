@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from et_downscaling.candidate_paths import get_candidate_study_paths
+
 
 def project_root():
     return Path(__file__).resolve().parents[2]
@@ -20,7 +22,7 @@ def project_root():
 def output_root(label):
     if label != "2020_2024":
         raise ValueError("Phase 3A outputs are confined to 2020_2024")
-    return project_root() / "outputs" / "diagnostics" / label / "optical_source_experiment"
+    return get_candidate_study_paths(project_root()).optical_root
 
 
 def parse_arguments(argv=None):
@@ -64,7 +66,7 @@ def adaptive_export(builder, start, end, destination, exporter, selectors, recor
         return [path]
     try:
         table = builder(start, end)
-        relative = path.relative_to(project_root() / "outputs")
+        relative = path.relative_to(get_candidate_study_paths(project_root()).workspace_root)
         result = exporter(table, relative.as_posix(), selectors)
         records.append({"start": start, "end_exclusive": end, "status": "downloaded"})
         return [result]
@@ -155,7 +157,7 @@ def main(argv=None):
         expected_rows, experiment_configuration, validate_context,
     )
     validate_context(args.start_date, args.end_date_exclusive, args.period_label)
-    print("Phase 3A plan: 5 paired-optical + 5 ERA5 annual downloads")
+    print("Phase 3A plan: 5 paired-optical annual downloads; shared ERA5 reused")
     print("training_performed = false")
     if not args.execute:
         print("Dry plan only: Earth Engine was not initialized.")
@@ -169,9 +171,6 @@ def main(argv=None):
         get_dynamic_s2_collection,
     )
     from et_downscaling.export import export_feature_collection
-    from et_downscaling.meteorology_export import (
-        ERA5_EXPORT_SELECTORS, build_era5_hourly_table,
-    )
     from et_downscaling.optical_source_experiment import build_paired_optical_table
 
     ee.Initialize(project=args.project)
@@ -185,7 +184,7 @@ def main(argv=None):
         "L30": hls.filter(ee.Filter.eq("sensor", "L30")),
     }
     scale_metadata = validate_hls_metadata(hls_sources)
-    records = {"optical": [], "era5": []}
+    records = {"optical": []}
 
     optical_chunks = raw / "_chunks" / "optical"
     optical_chunks.mkdir(parents=True, exist_ok=True)
@@ -200,31 +199,6 @@ def main(argv=None):
     optical_rows = merge_csv(optical_paths, optical_output)
     if optical_rows != expected_rows():
         raise RuntimeError(f"Expected {expected_rows()} optical rows, found {optical_rows}")
-
-    supports = support_features_from_local_csv(ee)
-    era5_chunks = raw / "_chunks" / "era5"
-    era5_chunks.mkdir(parents=True, exist_ok=True)
-    era5_paths = []
-
-    def era5_builder(start, end):
-        result = ee.FeatureCollection([])
-        for support in supports:
-            result = result.merge(build_era5_hourly_table(support, start, end))
-        return result
-
-    for start, end in annual_era5_windows():
-        era5_paths.extend(adaptive_export(
-            era5_builder, start, end, era5_chunks, export_feature_collection,
-            ERA5_EXPORT_SELECTORS, records["era5"],
-        ))
-    era5_output = raw / "era5_hourly.csv"
-    era5_rows = merge_csv(era5_paths, era5_output)
-    expected_era5_rows = int(
-        (pd.Timestamp("2025-01-01T05:00:00Z") - pd.Timestamp("2020-01-01T00:00:00Z"))
-        .total_seconds() // 3600 * 5
-    )
-    if era5_rows != expected_era5_rows:
-        raise RuntimeError(f"Expected {expected_era5_rows} ERA5 rows, found {era5_rows}")
 
     commit = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=project_root(), capture_output=True,
@@ -242,14 +216,15 @@ def main(argv=None):
         "project": args.project, "configuration": experiment_configuration(),
         "hls_earth_engine_metadata": scale_metadata,
         "requests": records, "optical_rows": optical_rows,
-        "era5_rows": era5_rows, "training_performed": False,
+        "shared_meteorology_source": "raw/meteorology",
+        "training_performed": False,
         "aoa_di_performed": False,
     }
     (metadata / "extraction_manifest.json").write_text(
         json.dumps(manifest, indent=2), encoding="utf-8"
     )
     print(f"Optical rows: {optical_rows}")
-    print(f"ERA5 rows: {era5_rows}")
+    print("ERA5 download: false; shared raw meteorology is reused")
     print("training_performed = false")
     return 0
 

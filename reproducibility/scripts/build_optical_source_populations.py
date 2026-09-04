@@ -9,6 +9,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from et_downscaling.candidate_paths import get_candidate_study_paths
+from et_downscaling.config import OUTPUT_PERIOD_LABEL
+
 from et_downscaling.model_spec import SPATIAL_BLOCK_SIZE_KM
 from et_downscaling.optical_source_experiment import COMMON_PREDICTORS, THRESHOLDS
 from et_downscaling.reference_et_local import build_daily_reference_et
@@ -23,7 +26,7 @@ def project_root():
 
 
 def output_root():
-    return project_root() / "outputs" / "diagnostics" / "2020_2024" / "optical_source_experiment"
+    return get_candidate_study_paths(project_root()).optical_root
 
 
 def require_unique(table, name):
@@ -98,16 +101,38 @@ def build_fold_tables(populations):
 
 
 def main():
-    root = output_root()
+    paths = get_candidate_study_paths(project_root())
+    root = paths.optical_root
     raw = root / "raw"
-    availability = project_root() / "outputs" / "diagnostics" / "2020_2024" / "availability" / "raw"
-    optical = pd.read_csv(raw / "paired_optical_common.csv", dtype={"station_id": str})
-    modis = pd.read_csv(availability / "modis_station_period.csv", dtype={"station_id": str})
-    s2_availability = pd.read_csv(availability / "s2_station_period.csv", dtype={"station_id": str})
-    hls_availability = pd.read_csv(availability / "hls_station_period.csv", dtype={"station_id": str})
-    era5 = pd.read_csv(raw / "era5_hourly.csv", dtype={"station_id": str})
+    availability = paths.availability_root / "raw"
+
+    optical = pd.read_csv(
+        raw / "paired_optical_common.csv",
+        dtype={"station_id": str},
+    )
+    modis = pd.read_csv(
+        availability / "modis_station_period.csv",
+        dtype={"station_id": str},
+    )
+    s2_availability = pd.read_csv(
+        availability / "s2_station_period.csv",
+        dtype={"station_id": str},
+    )
+    hls_availability = pd.read_csv(
+        availability / "hls_station_period.csv",
+        dtype={"station_id": str},
+    )
+
+    era5 = pd.read_csv(
+        paths.workspace_root
+        / "raw"
+        / "meteorology"
+        / f"era5_hourly_{OUTPUT_PERIOD_LABEL}.csv",
+        dtype={"station_id": str},
+    )
+
     support = pd.read_csv(
-        project_root() / "outputs" / "raw" / "meteorology" / "station_support.csv",
+        paths.station_support,
         dtype={"station_id": str},
     )
 

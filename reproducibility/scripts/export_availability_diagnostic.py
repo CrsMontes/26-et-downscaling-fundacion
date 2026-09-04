@@ -9,6 +9,8 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+from et_downscaling.candidate_paths import get_candidate_study_paths
+
 
 EXPECTED_PERIOD = ("2020-01-01", "2025-01-01", "2020_2024")
 SOURCES = ("modis", "s2", "hls", "s1_period")
@@ -21,7 +23,7 @@ def project_root() -> Path:
 def output_root(period_label: str) -> Path:
     if period_label != "2020_2024":
         raise ValueError("This approved diagnostic requires period_label=2020_2024")
-    return project_root() / "outputs" / "diagnostics" / period_label / "availability"
+    return get_candidate_study_paths(project_root()).availability_root
 
 
 def parse_arguments(argv=None):
@@ -103,7 +105,7 @@ def export_with_adaptive_partition(
             table = builder(modis_inputs, start, end)
         else:
             table = builder(modis_inputs, collection, start, end)
-        relative = path.relative_to(project_root() / "outputs")
+        relative = path.relative_to(get_candidate_study_paths(project_root()).workspace_root)
         exported = export_feature_collection(table, str(relative), selectors)
         executed_partitions.append({
             "start": start, "end_exclusive": end, "path": str(exported),

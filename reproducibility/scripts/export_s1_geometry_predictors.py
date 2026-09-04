@@ -1,4 +1,4 @@
-﻿"""Export reusable Sentinel-1 predictors for R077 and R142.
+"""Export reusable Sentinel-1 predictors for R077 and R142.
 
 The diagnostic preserves the two relevant acquisition geometries separately:
 - R077 ASCENDING
@@ -16,6 +16,8 @@ from pathlib import Path
 
 import ee
 import pandas as pd
+
+from et_downscaling.candidate_paths import get_candidate_study_paths
 
 from et_downscaling.availability_diagnostic import (
     annual_partitions,
@@ -143,13 +145,9 @@ def project_root():
 
 
 def experiment_root(period_label):
-    return (
-        project_root()
-        / "outputs"
-        / "diagnostics"
-        / period_label
-        / "s1_geometry_experiment"
-    )
+    if period_label != "2020_2024":
+        raise ValueError("Only the approved 2020_2024 period is allowed")
+    return get_candidate_study_paths(project_root()).s1_root
 
 
 def mean_properties(
@@ -417,11 +415,7 @@ def validate_output(
         )
 
     common_path = (
-        project_root()
-        / "outputs"
-        / "diagnostics"
-        / period_label
-        / "optical_source_experiment"
+        get_candidate_study_paths(project_root()).optical_root
         / "raw"
         / "paired_optical_common.csv"
     )

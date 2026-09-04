@@ -1,4 +1,4 @@
-﻿"""Build reusable 2020-2024 period meteorology from local raw inputs.
+"""Build reusable 2020-2024 period meteorology from local raw inputs.
 
 This script reuses the existing production-compatible aggregation logic.
 No Earth Engine access or model training is performed.
@@ -8,37 +8,39 @@ from pathlib import Path
 
 import pandas as pd
 
+from et_downscaling.candidate_paths import get_candidate_study_paths
+from et_downscaling.config import OUTPUT_PERIOD_LABEL
+
 from et_downscaling.local_training import _aggregate_period_inputs
 
 
 def main():
-    root = Path("outputs/diagnostics/2020_2024")
+    project_root = Path(__file__).resolve().parents[2]
+    paths = get_candidate_study_paths(project_root)
 
     optical_path = (
-        root
-        / "optical_source_experiment"
+        paths.optical_root
         / "raw"
         / "paired_optical_common.csv"
     )
 
     era5_path = (
-        root
-        / "optical_source_experiment"
+        paths.workspace_root
         / "raw"
-        / "era5_hourly.csv"
+        / "meteorology"
+        / f"era5_hourly_{OUTPUT_PERIOD_LABEL}.csv"
     )
 
     daily_path = (
-        root
-        / "optical_source_experiment"
+        paths.optical_root
         / "raw"
         / "daily_reference_eto.csv"
     )
 
     chirps_path = (
-        root
-        / "meteorology_experiment"
+        paths.workspace_root
         / "raw"
+        / "meteorology"
         / "chirps_daily_20191202_20241231.csv"
     )
 
@@ -112,8 +114,7 @@ def main():
         )
 
     output_dir = (
-        root
-        / "meteorology_experiment"
+        paths.meteorology_root
         / "processed"
     )
 
