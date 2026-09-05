@@ -59,18 +59,26 @@ methodological decision.
 
 ## Decision
 
-Retain conservative MODIS reconciliation as the reference 2021–2023
-architecture. Interpret the RF as a model of relative subpixel heterogeneity.
-Do not claim independent validation of absolute ET at 20 m.
+For the 2021-2023 architecture, parent-wise conservative reconciliation was
+retained as the then-accepted reference implementation. The RF field was
+interpreted as relative subpixel heterogeneity, and no independent validation
+of absolute ET at 20 m was claimed.
 
-Boundary discontinuities, fill behavior, AOA, and conservation are mandatory
-QA dimensions. `reproducibility/scripts/qa_conservative_reconciliation.py` persists the
-bounded fill and multi-parent conservation gate. A change to cross-boundary
-blending or another conservation operator is a substantive methodological
-change and is outside this decision.
+This decision is retained as historical methodological evidence only. The
+iterative raster reconciliation was subsequently rejected after the
+non-nested-grid audit and was superseded for the current 2020-2024 workflow by
+Decision 19.
+
+The current accepted reconciliation is one global exact-overlap constrained
+projection between the regular 20 m UTM grid and the native MODIS sinusoidal
+grid. It does not use coarse-to-fine nearest-neighbour correction or arbitrary
+reconciliation iterations.
 
 ## Status
 
-Accepted description of the implemented architecture. Bounded empirical QA of
-nonzero fill and multi-parent conservation is complete for 2022-05-25; it is a
-production-consistency test, not independent validation of ET at 20 m.
+Superseded by `19_exact_overlap_global_reconciliation.md`.
+
+The legacy reconciliation implementation and its dedicated QA script have been
+removed from the active codebase. This decision file is preserved to document
+the methodological evolution rather than to describe the current production
+algorithm.
