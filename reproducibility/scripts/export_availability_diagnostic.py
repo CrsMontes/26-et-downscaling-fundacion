@@ -217,7 +217,7 @@ def main(argv=None):
     inventory_path = raw_dir / "sentinel1_geometry_inventory.csv"
     if not inventory_path.exists():
         inventory = build_s1_geometry_inventory(collections["s1_period"], footprints)
-        relative = inventory_path.relative_to(project_root() / "outputs")
+        relative = inventory_path.relative_to(get_candidate_study_paths(project_root()).workspace_root)
         export_feature_collection(inventory, str(relative), S1_INVENTORY_SELECTORS)
         inventory_status = "downloaded"
     else:
