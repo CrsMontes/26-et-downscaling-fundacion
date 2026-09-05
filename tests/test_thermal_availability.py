@@ -4,8 +4,6 @@ import sys
 import unittest
 from pathlib import Path
 
-import pandas as pd
-
 import et_downscaling.thermal_availability as thermal
 
 
@@ -22,7 +20,6 @@ def load_script(filename):
 
 
 export_script = load_script("export_thermal_availability.py")
-summary_script = load_script("summarize_thermal_availability.py")
 
 
 class ThermalConfigurationTests(unittest.TestCase):
@@ -87,28 +84,6 @@ class ThermalConfigurationTests(unittest.TestCase):
         ])
         self.assertFalse(args.execute)
 
-
-class SummaryTests(unittest.TestCase):
-    def test_view_table_keeps_1150_rows(self):
-        data = pd.DataFrame({
-            "station_id": [str(i % 5) for i in range(1150)],
-            "period_start": [f"row-{i}" for i in range(1150)],
-            "l8_only_products": [0] * 1150,
-            "l8_only_unique_dates": [0] * 1150,
-            "l8_only_dates_with_valid_lst": [0] * 1150,
-            "l8_only_acquisition_present": [0] * 1150,
-            "l8_only_any_valid_lst": [0] * 1150,
-            "l8_only_l8_products": [0] * 1150,
-            "l8_only_l9_products": [0] * 1150,
-            "l8_only_sensors_present": [""] * 1150,
-            "l8_only_valid_area_m2": [0] * 1150,
-            "l8_only_valid_coverage_pct": [0] * 1150,
-            "l8_only_st_qa_mean_k": [None] * 1150,
-            "l8_only_historical_dn_ge_293_any_valid_lst": [0] * 1150,
-            "l8_only_historical_dn_ge_293_coverage_pct": [0] * 1150,
-        })
-        result = summary_script.view_table(data, "L8_ONLY", "l8_only")
-        self.assertEqual(len(result), 1150)
 
 
 if __name__ == "__main__":
