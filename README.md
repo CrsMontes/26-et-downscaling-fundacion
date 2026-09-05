@@ -104,7 +104,7 @@ Independent comparison with field observations is treated as a separate scientif
 
 ## Authors
 
-Cristian Montes
+Cristian C. Montes-Chaura,
 Manuel Coy Pertuz
 
 
