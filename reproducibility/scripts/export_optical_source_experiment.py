@@ -114,7 +114,7 @@ def annual_era5_windows():
 
 def support_features_from_local_csv(ee):
     table = pd.read_csv(
-        project_root() / "outputs" / "raw" / "meteorology" / "station_support.csv",
+        get_candidate_study_paths(project_root()).workspace_root / "raw" / "meteorology" / "station_support.csv",
         dtype={"station_id": str},
     )
     if len(table) != 5 or table.station_id.nunique() != 5:

@@ -327,7 +327,7 @@ def predictor_metadata():
     )
     add(
         ["footprint_mean_elevation_m"], "Topography", "NASADEM", "30 m source grid",
-        "Mean over MODIS footprint", "Static", "outputs/raw/meteorology/station_support.csv",
+        "Mean over MODIS footprint", "Static", "raw/meteorology/station_support.csv",
         "available_not_evaluated", "candidate", False,
         "Current production stack does not expose elevation as a model band", False,
         "Currently used to calculate reference ET, not as a fitted predictor.",
