@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from .aoa_ridge25 import AOAParameters
+
 from .modeling import (
     RIDGE25_MODEL_FEATURES,
     TARGET_COLUMN,
@@ -247,6 +249,78 @@ def save_run_tables(
     return paths
 
 
+def save_aoa_artifacts(
+    population: pd.DataFrame,
+    parameters: AOAParameters,
+    run_directory: Path,
+) -> dict[str, Path]:
+    """Write the current-run AOA specification and training DI values."""
+    run_directory = Path(run_directory)
+    table_directory = run_directory / "tables"
+    table_directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    feature_path = table_directory / "ridge25_aoa_feature_scaling.csv"
+    training_path = table_directory / "ridge25_aoa_training_di.csv"
+    metadata_path = run_directory / "ridge25_aoa_metadata.json"
+
+    pd.DataFrame(
+        {
+            "feature": list(parameters.feature_names),
+            "mean": np.asarray(parameters.means, dtype=float),
+            "scale": np.asarray(parameters.scales, dtype=float),
+        }
+    ).to_csv(
+        feature_path,
+        index=False,
+    )
+
+    if len(population) != len(parameters.training_di):
+        raise ValueError(
+            "AOA training DI count differs from the training population."
+        )
+
+    di_table = population[
+        ["station_id", "period_start", "spatial_block", "year"]
+    ].copy()
+    di_table["training_di"] = np.asarray(
+        parameters.training_di,
+        dtype=float,
+    )
+    di_table.to_csv(
+        training_path,
+        index=False,
+    )
+
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "feature_count": len(parameters.feature_names),
+                "features": list(parameters.feature_names),
+                "training_rows": len(population),
+                "mean_training_distance": float(
+                    parameters.mean_training_distance
+                ),
+                "threshold": float(parameters.threshold),
+                "definition": (
+                    "unweighted standardized Euclidean DI with "
+                    "leave-one-spatial-block-out training DI threshold"
+                ),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    return {
+        "feature_scaling": feature_path,
+        "training_di": training_path,
+        "metadata": metadata_path,
+    }
+
+
 def save_model_metadata(
     result: Ridge25Result,
     run_directory: Path,
@@ -269,6 +343,9 @@ def save_model_metadata(
             ),
             "fit_intercept": bool(
                 regressor.fit_intercept
+            ),
+            "ridge_intercept_standardized_space": float(
+                regressor.intercept_
             ),
             "predictor_count": len(
                 RIDGE25_MODEL_FEATURES

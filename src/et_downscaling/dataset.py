@@ -279,68 +279,57 @@ def build_availability_table(
             )
 
             # ================================================
-            # Sentinel-1
+            # Sentinel-1 (optional diagnostic dependency)
             # ================================================
 
-            s1_period = (
-                s1_collection
-                .filterDate(
-                    period_start,
-                    period_end,
-                )
-                .filterBounds(
-                    footprint_geometry
-                )
-            )
-
-            s1_date_keys = (
-                ee.List(
-                    s1_period
-                    .aggregate_array(
-                        "date_key"
+            if s1_collection is None:
+                s1_date_keys = ee.List([])
+                s1_products_total = ee.Number(0)
+                s1_coverage = ee.Number(-1)
+                s1_valid = ee.Number(0)
+            else:
+                s1_period = (
+                    s1_collection
+                    .filterDate(
+                        period_start,
+                        period_end,
+                    )
+                    .filterBounds(
+                        footprint_geometry
                     )
                 )
-                .distinct()
-                .sort()
-            )
 
-            s1_predictors = (
-                build_s1_median(
+                s1_date_keys = (
+                    ee.List(
+                        s1_period
+                        .aggregate_array(
+                            "date_key"
+                        )
+                    )
+                    .distinct()
+                    .sort()
+                )
+
+                s1_predictors = build_s1_median(
                     s1_period,
                     footprint_geometry,
                 )
-            )
-
-            s1_coverage = (
-                get_s1_coverage(
+                s1_coverage = get_s1_coverage(
                     s1_predictors,
                     footprint_geometry,
                 )
-            )
-
-            s1_has_products = (
-                s1_period
-                .size()
-                .gt(0)
-            )
-
-            s1_has_coverage = (
-                s1_coverage.gte(
+                s1_products_total = s1_period.size()
+                s1_has_products = s1_products_total.gt(0)
+                s1_has_coverage = s1_coverage.gte(
                     S1_FULL_COVERAGE
                 )
-            )
-
-            s1_valid = (
-                ee.Number(
+                s1_valid = ee.Number(
                     ee.Algorithms.If(
-                        s1_has_products.And(
-                            s1_has_coverage
-                        ),
+                        s1_has_products.And(s1_has_coverage),
                         1,
                         0,
                     )
                 )
-            )
 
             # ================================================
             # Analysis period
@@ -477,7 +466,7 @@ def build_availability_table(
                         ),
 
                     "s1_products_total":
-                        s1_period.size(),
+                        s1_products_total,
 
                     "s1_union_coverage_pct":
                         s1_coverage
@@ -785,28 +774,6 @@ def calculate_observation(
     )
 
     # ========================================================
-    # Sentinel-1
-    # ========================================================
-
-    s1_period = (
-        s1_collection
-        .filterDate(
-            period_start,
-            period_end,
-        )
-        .filterBounds(
-            footprint_geometry
-        )
-    )
-
-    s1_predictors = (
-        build_s1_median(
-            s1_period,
-            footprint_geometry,
-        )
-    )
-
-    # ========================================================
     # Source-specific footprint statistics
     #
     # Optical predictors are averaged at their operational
@@ -889,102 +856,73 @@ def calculate_observation(
         )
     )
 
-    s1_stats_raw = (
-        ee.Dictionary(
+    if s1_collection is None:
+        s1_stats = complete_stats_dictionary(
+            ee.Dictionary({}),
+            s1_stat_columns,
+        )
+        s1_missing_keys = ee.List(s1_stat_columns)
+        footprint_qa_stats = complete_qa_dictionary(
+            ee.Dictionary({})
+        )
+    else:
+        s1_period = (
+            s1_collection
+            .filterDate(period_start, period_end)
+            .filterBounds(footprint_geometry)
+        )
+        s1_predictors = build_s1_median(
+            s1_period,
+            footprint_geometry,
+        )
+        s1_stats_raw = ee.Dictionary(
             s1_predictors
             .select(
                 S1_MODEL_BANDS,
                 s1_stat_columns,
             )
             .reduceRegion(
-                reducer=(
-                    ee.Reducer.mean()
-                ),
-                geometry=(
-                    footprint_geometry
-                ),
-                crs=(
-                    ANALYSIS_CRS
-                ),
-                scale=(
-                    S1_FOOTPRINT_REDUCTION_SCALE_M
-                ),
+                reducer=ee.Reducer.mean(),
+                geometry=footprint_geometry,
+                crs=ANALYSIS_CRS,
+                scale=S1_FOOTPRINT_REDUCTION_SCALE_M,
                 maxPixels=1e7,
                 tileScale=8,
             )
         )
-    )
-
-    s1_missing_keys = (
-        get_missing_stat_keys(
+        s1_missing_keys = get_missing_stat_keys(
             s1_stats_raw,
             s1_stat_columns,
         )
-    )
-
-    s1_stats = (
-        complete_stats_dictionary(
+        s1_stats = complete_stats_dictionary(
             s1_stats_raw,
             s1_stat_columns,
         )
-    )
 
-    footprint_stats = (
-        optical_stats.combine(
-            s1_stats,
-            True,
-        )
-    )
-
-    footprint_missing_keys = (
-        optical_missing_keys.cat(
-            s1_missing_keys
-        )
-    )
-
-    # ========================================================
-    # Sentinel-1 geometry QA
-    #
-    # Angle is exported but is not part of the extraction/model
-    # predictor stack and therefore does not determine
-    # predictor completeness.
-    # ========================================================
-
-    angle_image = (
-        s1_predictors
-        .select(
-            [
-                "Angle_deg",
-            ],
+        angle_image = s1_predictors.select(
+            ["Angle_deg"],
             QA_STAT_COLUMNS,
         )
-    )
-
-    footprint_qa_stats_raw = (
-        ee.Dictionary(
+        footprint_qa_stats_raw = ee.Dictionary(
             angle_image.reduceRegion(
-                reducer=(
-                    ee.Reducer.mean()
-                ),
-                geometry=(
-                    footprint_geometry
-                ),
-                crs=(
-                    ANALYSIS_CRS
-                ),
-                scale=(
-                    S1_FOOTPRINT_REDUCTION_SCALE_M
-                ),
+                reducer=ee.Reducer.mean(),
+                geometry=footprint_geometry,
+                crs=ANALYSIS_CRS,
+                scale=S1_FOOTPRINT_REDUCTION_SCALE_M,
                 maxPixels=1e7,
                 tileScale=8,
             )
         )
-    )
-
-    footprint_qa_stats = (
-        complete_qa_dictionary(
+        footprint_qa_stats = complete_qa_dictionary(
             footprint_qa_stats_raw
         )
+
+    footprint_stats = optical_stats.combine(
+        s1_stats,
+        True,
+    )
+    footprint_missing_keys = optical_missing_keys.cat(
+        s1_missing_keys
     )
 
     return (

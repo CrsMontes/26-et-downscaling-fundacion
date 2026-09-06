@@ -2,14 +2,15 @@
 
 Scientific execution
 --------------------
-1. Reuse or refresh complete raw Earth Engine extractions in the external
-   workspace.
-2. Rebuild the local complete master database.
+1. Reuse or refresh the canonical raw Sentinel-2/MODIS and meteorological
+   extractions in the external workspace.
+2. Rebuild the local training master directly from those raw caches.
 3. Rebuild the GE90 Ridge-25 population.
 4. Perform spatial-block and leave-one-year-out OOF validation.
-5. Fit Ridge-25 in memory on all eligible observations.
-6. Save current-run tables, metadata and core diagnostic figures.
-7. Optionally generate one locally downloaded, adaptively tiled 20 m ET raster.
+5. Fit Ridge-25 in memory on all eligible observations and rebuild the AOA.
+6. Save current-run tables, AOA parameters, metadata and core diagnostics.
+7. Optionally generate one locally downloaded 20 m ET raster followed by the
+   single global exact-overlap MODIS reconciliation.
 
 A fitted model is never loaded from disk. Reconciliation is never used during
 training or OOF validation. Google Drive and persistent Earth Engine assets are
@@ -88,14 +89,6 @@ def parse_arguments():
         "--min-tile-size-m",
         type=int,
         default=500,
-    )
-    parser.add_argument(
-        "--skip-reference-check",
-        action="store_true",
-        help=(
-            "Do not enforce the 799-row canonical 2020-2024 "
-            "reference gate."
-        ),
     )
     parser.add_argument(
         "--no-figures",
@@ -201,192 +194,39 @@ def run_script(
     )
 
 
-def run_repro_script(
+def build_final_training_master(
     project_root: Path,
-    script_name: str,
-    arguments: list[str],
-) -> None:
-    command = [
-        sys.executable,
-        str(
-            project_root
-            / "reproducibility"
-            / "scripts"
-            / script_name
-        ),
-        *arguments,
-    ]
-
-    print()
-    print(
-        ">",
-        " ".join(command),
-    )
-
-    subprocess.run(
-        command,
-        cwd=project_root,
-        check=True,
-        text=True,
-        env=os.environ.copy(),
-    )
-
-
-def build_or_reuse_candidate_master(
-    project_root: Path,
-    workspace,
-    args,
-    project_id: str,
-):
-    master_path = (
-        workspace.master
-        / "master_predictor_store.parquet"
-    )
-
-    rebuild = (
-        args.refresh_raw
-        or not master_path.is_file()
-    )
-
-    if not rebuild:
-        print()
-        print("=== CANONICAL CANDIDATE MASTER ===")
-        print("Reusing:", master_path)
-
-        master = pd.read_parquet(
-            master_path,
-        )
-
-        print(
-            "Candidate-master rows:",
-            len(master),
-        )
-        print(
-            "Candidate-master columns:",
-            len(master.columns),
-        )
-        return master
-
-    if (
-        args.start_date != CANONICAL_START_DATE
-        or args.end_date_exclusive
-        != CANONICAL_END_DATE_EXCLUSIVE
-    ):
-        raise RuntimeError(
-            "The canonical training master is frozen to "
-            "2020-01-01 through 2024-12-31."
-        )
-
-    print()
-    print("=== COMPLETE CANDIDATE ACQUISITION ===")
-
-    common_arguments = [
-        "--start-date",
-        args.start_date,
-        "--end-date-exclusive",
-        args.end_date_exclusive,
-        "--period-label",
-        "2020_2024",
-        "--project",
-        project_id,
-        "--execute",
-    ]
-
-    # Availability and paired optical support.
-    run_repro_script(
-        project_root,
-        "export_availability_diagnostic.py",
-        common_arguments,
-    )
-    run_repro_script(
-        project_root,
-        "export_optical_source_experiment.py",
-        common_arguments,
-    )
-
-    # Row-preserving population and reference-ET support.
-    run_repro_script(
-        project_root,
-        "build_optical_source_populations.py",
-        [],
-    )
-    run_repro_script(
-        project_root,
-        "build_meteorology_experiment_table.py",
-        [],
-    )
-
-    # Candidate predictor families retained for reproducibility.
-    run_repro_script(
-        project_root,
-        "export_s2_rich_optical.py",
-        common_arguments,
-    )
-    run_repro_script(
-        project_root,
-        "export_s1_geometry_predictors.py",
-        common_arguments,
-    )
-    run_repro_script(
-        project_root,
-        "export_thermal_availability.py",
-        common_arguments,
-    )
-    run_repro_script(
-        project_root,
-        "export_hls_albedo_fvc.py",
-        common_arguments,
-    )
-
-    # Approved Landsat-LST predictor uses its frozen configuration.
-    run_repro_script(
-        project_root,
-        "export_landsat_lst_predictor.py",
-        [
-            "--project",
-            project_id,
-            "--execute",
-        ],
-    )
-
-    print()
-    print("=== CANDIDATE FEATURE STORE ===")
-
-    run_repro_script(
-        project_root,
-        "build_experimental_feature_store.py",
-        [],
-    )
-
-    # Assemble the master only. Do not run the sensitivity ladder here.
+    master_path: Path,
+) -> pd.DataFrame:
+    """Rebuild the final Ridge-25 master from canonical reusable raw caches."""
     run_script(
         project_root,
-        "build_candidate_master.py",
-        [],
+        "build_training_dataset.py",
+        [
+            "--optical-source",
+            "S2",
+            "--ridge25-only",
+        ],
     )
 
     if not master_path.is_file():
         raise FileNotFoundError(
-            "Canonical candidate master was not created:\n"
+            "Final Ridge-25 training master was not created:\n"
             f"{master_path}"
         )
 
-    master = pd.read_parquet(
+    master = pd.read_csv(
         master_path,
+        dtype={"station_id": str},
     )
 
     print()
-    print("=== CANONICAL CANDIDATE MASTER ===")
-    print(
-        "Candidate-master rows:",
-        len(master),
-    )
-    print(
-        "Candidate-master columns:",
-        len(master.columns),
-    )
-
+    print("=== FINAL RIDGE-25 TRAINING MASTER ===")
+    print("Master rows:", len(master))
+    print("Master columns:", len(master.columns))
+    print("Master:", master_path)
     return master
+
 
 
 def ask_yes_no(
@@ -482,6 +322,10 @@ def main() -> None:
 
     from et_downscaling.config import (
         OUTPUT_PERIOD_LABEL,
+        S2_CLEAR_THRESHOLD,
+        S2_DAILY_MOSAIC_SORT_PROPERTY,
+        S2_PREPROCESSING_VERSION,
+        build_training_output_filename,
     )
     from et_downscaling.aoa_ridge25 import (
         build_unweighted_aoa,
@@ -489,10 +333,15 @@ def main() -> None:
     from et_downscaling.ridge25_overlap_production import (
         download_ridge25_basin,
     )
+    from et_downscaling.local_reconciliation import (
+        RIDGE25_USABLE_SUPPORT_FRACTION,
+    )
     from et_downscaling.modeling import (
+        OPTICAL_COVERAGE_THRESHOLD_PCT,
         train_and_validate_ridge25,
     )
     from et_downscaling.run_reporting import (
+        save_aoa_artifacts,
         save_core_figures,
         save_model_metadata,
         save_run_tables,
@@ -556,10 +405,13 @@ def main() -> None:
 
     print()
     print("=== RAW DATA ===")
-    meteorology_arguments = []
+    meteorology_arguments = [
+        "--ridge25-only",
+    ]
     satellite_arguments = [
         "--optical-source",
         "S2",
+        "--ridge25-only",
     ]
     if args.refresh_raw:
         meteorology_arguments.append(
@@ -584,31 +436,19 @@ def main() -> None:
 
     master_path = (
         workspace.master
-        / "master_predictor_store.parquet"
+        / "S2"
+        / build_training_output_filename("S2")
     )
 
-    master = build_or_reuse_candidate_master(
+    master = build_final_training_master(
         project_root=project_root,
-        workspace=workspace,
-        args=args,
-        project_id=project_id,
-    )
-
-    verify_reference = (
-        args.start_date
-        == CANONICAL_START_DATE
-        and args.end_date_exclusive
-        == CANONICAL_END_DATE_EXCLUSIVE
-        and not args.skip_reference_check
+        master_path=master_path,
     )
 
     print()
     print("=== RIDGE-25 TRAINING / VALIDATION ===")
     result = train_and_validate_ridge25(
         master,
-        verify_reference_2020_2024=(
-            verify_reference
-        ),
     )
 
     print(
@@ -638,6 +478,20 @@ def main() -> None:
         result.temporal_metrics,
     )
 
+    aoa_parameters = build_unweighted_aoa(
+        result.population
+    )
+    print()
+    print("=== RIDGE-25 AREA OF APPLICABILITY ===")
+    print(
+        "AOA threshold:",
+        f"{aoa_parameters.threshold:.6f}",
+    )
+    print(
+        "AOA training rows:",
+        len(aoa_parameters.training_di),
+    )
+
     run_id = (
         datetime.now(timezone.utc)
         .strftime("%Y%m%dT%H%M%SZ")
@@ -655,6 +509,11 @@ def main() -> None:
 
     table_paths = save_run_tables(
         result,
+        run_directory,
+    )
+    aoa_paths = save_aoa_artifacts(
+        result.population,
+        aoa_parameters,
         run_directory,
     )
 
@@ -682,9 +541,25 @@ def main() -> None:
             "raw_refreshed": bool(
                 args.refresh_raw
             ),
-            "canonical_reference_check": bool(
-                verify_reference
+            "sentinel2_cloud_score_clear_threshold": float(
+                S2_CLEAR_THRESHOLD
             ),
+            "sentinel2_daily_mosaic_sort_property": (
+                S2_DAILY_MOSAIC_SORT_PROPERTY
+            ),
+            "sentinel2_preprocessing_version": (
+                S2_PREPROCESSING_VERSION
+            ),
+            "training_optical_coverage_threshold_pct": float(
+                OPTICAL_COVERAGE_THRESHOLD_PCT
+            ),
+            "aoa_threshold": float(
+                aoa_parameters.threshold
+            ),
+            "usable_support_fraction": float(
+                RIDGE25_USABLE_SUPPORT_FRACTION
+            ),
+            "reconciliation": "single_global_exact_overlap",
             "google_drive_used": False,
             "earth_engine_persistent_asset_created": False,
             "reconciliation_used_in_training": False,
@@ -711,6 +586,10 @@ def main() -> None:
     print(
         "Tables:",
         len(table_paths),
+    )
+    print(
+        "AOA artifacts:",
+        len(aoa_paths),
     )
     print(
         "Core figures:",
@@ -740,10 +619,6 @@ def main() -> None:
         project=project_id
     )
     ee.Number(1).getInfo()
-
-    aoa_parameters = build_unweighted_aoa(
-        result.population
-    )
 
     product = download_ridge25_basin(
         project_root=project_root,

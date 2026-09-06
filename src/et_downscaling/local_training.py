@@ -96,14 +96,19 @@ def _aggregate_period_inputs(
     periods: pd.DataFrame,
     era5_hourly: pd.DataFrame,
     daily_reference_et: pd.DataFrame,
-    chirps_daily: pd.DataFrame,
+    chirps_daily: pd.DataFrame | None,
 ) -> pd.DataFrame:
     hourly = prepare_hourly_era5(era5_hourly)
     daily_reference = _normalize_station_id(daily_reference_et)
     daily_reference["local_date"] = pd.to_datetime(
         daily_reference["local_date"], errors="coerce"
     ).dt.date
-    chirps = _prepare_chirps(chirps_daily)
+    chirps = (
+        _prepare_chirps(chirps_daily)
+        if chirps_daily is not None
+        else None
+    )
+    chirps_required = chirps is not None
 
     rows = []
     for row in periods.itertuples(index=False):
@@ -127,26 +132,48 @@ def _aggregate_period_inputs(
             & (daily_reference["local_date"] < end)
         ]
 
-        station_chirps_period = chirps.loc[
-            (chirps["station_id"] == station_id)
-            & (chirps["date"] >= start)
-            & (chirps["date"] < end)
-        ]
         previous_start = start - timedelta(days=30)
-        station_chirps_previous = chirps.loc[
-            (chirps["station_id"] == station_id)
-            & (chirps["date"] >= previous_start)
-            & (chirps["date"] < start)
-        ]
+        if chirps_required:
+            station_chirps_period = chirps.loc[
+                (chirps["station_id"] == station_id)
+                & (chirps["date"] >= start)
+                & (chirps["date"] < end)
+            ]
+            station_chirps_previous = chirps.loc[
+                (chirps["station_id"] == station_id)
+                & (chirps["date"] >= previous_start)
+                & (chirps["date"] < start)
+            ]
+        else:
+            station_chirps_period = None
+            station_chirps_previous = None
 
         raw_complete_hours = int(station_hourly["raw_values_complete"].sum())
         era5_hours_total = len(station_hourly)
         reference_days_total = len(station_daily)
         reference_days_complete = int(station_daily["era5_daily_complete"].sum())
-        chirps_days_period = len(station_chirps_period)
-        chirps_valid_days_period = int(station_chirps_period["precipitation_mm"].notna().sum())
-        chirps_days_prev30 = len(station_chirps_previous)
-        chirps_valid_days_prev30 = int(station_chirps_previous["precipitation_mm"].notna().sum())
+        if chirps_required:
+            chirps_days_period = len(station_chirps_period)
+            chirps_valid_days_period = int(
+                station_chirps_period["precipitation_mm"].notna().sum()
+            )
+            chirps_days_prev30 = len(station_chirps_previous)
+            chirps_valid_days_prev30 = int(
+                station_chirps_previous["precipitation_mm"].notna().sum()
+            )
+            precip_period = station_chirps_period[
+                "precipitation_mm"
+            ].sum(min_count=1)
+            precip_prev30 = station_chirps_previous[
+                "precipitation_mm"
+            ].sum(min_count=1)
+        else:
+            chirps_days_period = 0
+            chirps_valid_days_period = 0
+            chirps_days_prev30 = 0
+            chirps_valid_days_prev30 = 0
+            precip_period = np.nan
+            precip_prev30 = np.nan
 
         era5_temporal_complete = (
             era5_hours_total == expected_hours
@@ -158,10 +185,15 @@ def _aggregate_period_inputs(
             and station_daily[["ETo_mm_day", "ETr_mm_day"]].notna().all().all()
         )
         chirps_complete = (
-            chirps_days_period == number_days
+            chirps_required
+            and chirps_days_period == number_days
             and chirps_valid_days_period == number_days
             and chirps_days_prev30 == 30
             and chirps_valid_days_prev30 == 30
+        )
+        final_meteorology_complete = (
+            era5_temporal_complete
+            and reference_et_complete
         )
 
         rows.append(
@@ -174,8 +206,8 @@ def _aggregate_period_inputs(
                 "VPD_max_kPa": station_hourly["VPD_kPa"].max(),
                 "SolarRad_MJ_m2_day": station_hourly["SolarRad_MJ_m2_hour"].sum(min_count=1) / number_days,
                 "Wind_mean_ms": station_hourly["Wind_ms"].mean(),
-                "Precip_period_mm": station_chirps_period["precipitation_mm"].sum(min_count=1),
-                "Precip_prev30d_mm": station_chirps_previous["precipitation_mm"].sum(min_count=1),
+                "Precip_period_mm": precip_period,
+                "Precip_prev30d_mm": precip_prev30,
                 "ETo_mm_period": station_daily["ETo_mm_day"].sum(min_count=1),
                 "ETr_mm_period": station_daily["ETr_mm_day"].sum(min_count=1),
                 "ETo_mm_day": station_daily["ETo_mm_day"].sum(min_count=1) / number_days,
@@ -195,7 +227,12 @@ def _aggregate_period_inputs(
                 "era5_temporal_complete": int(era5_temporal_complete),
                 "chirps_complete": int(chirps_complete),
                 "meteo_complete": int(
-                    era5_temporal_complete and chirps_complete and reference_et_complete
+                    final_meteorology_complete
+                    if not chirps_required
+                    else (
+                        final_meteorology_complete
+                        and chirps_complete
+                    )
                 ),
             }
         )
@@ -206,7 +243,7 @@ def _aggregate_period_inputs(
 def build_training_master(
     satellite: pd.DataFrame,
     era5_hourly: pd.DataFrame,
-    chirps_daily: pd.DataFrame,
+    chirps_daily: pd.DataFrame | None,
     station_support: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build the complete local master and daily reference-ET QA table."""

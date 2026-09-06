@@ -30,6 +30,14 @@ def parse_arguments():
         )
     )
     parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--ridge25-only",
+        action="store_true",
+        help=(
+            "Export only station support and ERA5-Land required by "
+            "the accepted Ridge-25 model. CHIRPS is not queried."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -130,11 +138,21 @@ def main():
     chirps_end = (date.fromisoformat(END_DATE) - timedelta(days=1)).strftime("%Y%m%d")
     chirps_path = output_directory / f"chirps_daily_{chirps_start}_{chirps_end}.csv"
 
-    if support_path.exists() and era5_path.exists() and chirps_path.exists() and not args.force:
+    required_cache_paths = [
+        support_path,
+        era5_path,
+    ]
+    if not args.ridge25_only:
+        required_cache_paths.append(chirps_path)
+
+    if all(path.exists() for path in required_cache_paths) and not args.force:
         print("Reusable meteorological raw files already exist:")
-        print(support_path)
-        print(era5_path)
-        print(chirps_path)
+        for path in required_cache_paths:
+            print(path)
+        print(
+            "CHIRPS queried:",
+            "NO" if args.ridge25_only else "YES",
+        )
         print("Use --force only for an intentional rebuild.")
         return
 
@@ -162,7 +180,8 @@ def main():
     era5_chunk_dir = chunk_root / "era5"
     chirps_chunk_dir = chunk_root / "chirps"
     era5_chunk_dir.mkdir(parents=True, exist_ok=True)
-    chirps_chunk_dir.mkdir(parents=True, exist_ok=True)
+    if not args.ridge25_only:
+        chirps_chunk_dir.mkdir(parents=True, exist_ok=True)
 
     era5_chunks = []
     for station_index, station_id in enumerate(station_ids, start=1):
@@ -179,23 +198,42 @@ def main():
             era5_chunks.append(path)
 
     chirps_chunks = []
-    for station_index, station_id in enumerate(station_ids, start=1):
-        station_support = get_station_support(support_table, station_id)
-        for year, window_start, window_end in get_chirps_year_windows():
-            filename = f"station_{station_index:02d}_{year}.csv"
-            path = chirps_chunk_dir / filename
-            if not path.exists() or args.force:
-                table = build_chirps_daily_table(station_support, window_start, window_end)
-                relative = Path("raw/meteorology/_chunks") / OUTPUT_PERIOD_LABEL / "chirps" / filename
-                path = export_feature_collection(table, relative.as_posix(), CHIRPS_EXPORT_SELECTORS)
-            else:
-                print("Using existing CHIRPS partition:", path)
-            chirps_chunks.append(path)
+    if not args.ridge25_only:
+        for station_index, station_id in enumerate(station_ids, start=1):
+            station_support = get_station_support(support_table, station_id)
+            for year, window_start, window_end in get_chirps_year_windows():
+                filename = f"station_{station_index:02d}_{year}.csv"
+                path = chirps_chunk_dir / filename
+                if not path.exists() or args.force:
+                    table = build_chirps_daily_table(
+                        station_support,
+                        window_start,
+                        window_end,
+                    )
+                    relative = (
+                        Path("raw/meteorology/_chunks")
+                        / OUTPUT_PERIOD_LABEL
+                        / "chirps"
+                        / filename
+                    )
+                    path = export_feature_collection(
+                        table,
+                        relative.as_posix(),
+                        CHIRPS_EXPORT_SELECTORS,
+                    )
+                else:
+                    print("Using existing CHIRPS partition:", path)
+                chirps_chunks.append(path)
 
     era5_rows = merge_csv_chunks(era5_chunks, era5_path)
-    chirps_rows = merge_csv_chunks(chirps_chunks, chirps_path)
     print("ERA5 rows:", era5_rows)
-    print("CHIRPS rows:", chirps_rows)
+
+    chirps_rows = None
+    if not args.ridge25_only:
+        chirps_rows = merge_csv_chunks(chirps_chunks, chirps_path)
+        print("CHIRPS rows:", chirps_rows)
+    else:
+        print("CHIRPS queried: NO")
 
     # Exact expected ERA5 row count from local calendar years.
     expected_era5 = (
@@ -205,16 +243,23 @@ def main():
     if era5_rows != expected_era5:
         raise RuntimeError(f"ERA5 row count mismatch: {era5_rows} != {expected_era5}")
 
-    expected_chirps_days = (date.fromisoformat(END_DATE) - (date.fromisoformat(START_DATE) - timedelta(days=30))).days
-    expected_chirps = expected_chirps_days * len(station_ids)
-    if chirps_rows != expected_chirps:
-        raise RuntimeError(f"CHIRPS row count mismatch: {chirps_rows} != {expected_chirps}")
+    if not args.ridge25_only:
+        expected_chirps_days = (
+            date.fromisoformat(END_DATE)
+            - (date.fromisoformat(START_DATE) - timedelta(days=30))
+        ).days
+        expected_chirps = expected_chirps_days * len(station_ids)
+        if chirps_rows != expected_chirps:
+            raise RuntimeError(
+                f"CHIRPS row count mismatch: {chirps_rows} != {expected_chirps}"
+            )
 
     shutil.rmtree(chunk_root)
     print("Meteorology raw export completed:")
     print(support_path)
     print(era5_path)
-    print(chirps_path)
+    if not args.ridge25_only:
+        print(chirps_path)
 
 
 if __name__ == "__main__":

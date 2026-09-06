@@ -8,3 +8,12 @@ They are retained as scientific provenance and must not be imported or
 executed by `scripts/run_pipeline.py`.
 
 Use `../script_manifest.md` to identify their role.
+
+
+The current S2-only FVC/albedo decision audit is
+`recheck_s2_fvc_albedo.py`. It is diagnostic only, does not modify the final
+Ridge-25 specification, and intentionally excludes HLS.
+
+`build_candidate_master.py` is retained here only to reconstruct the historical
+five-year candidate predictor store. It is not part of the accepted operational
+Ridge-25 workflow.

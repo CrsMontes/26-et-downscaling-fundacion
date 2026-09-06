@@ -10,12 +10,15 @@ Normal entry point:
 
 The production pipeline orchestrates:
 
-- `export_meteorology_data.py`
-- `export_satellite_data.py`
-- `build_training_dataset.py`
+- `export_meteorology_data.py --ridge25-only` (ERA5-Land + station support)
+- `export_satellite_data.py --optical-source S2 --ridge25-only` (MODIS + S2; no S1 query)
+- `build_training_dataset.py --optical-source S2 --ridge25-only` (no CHIRPS requirement)
 - Ridge-25 fitting and blocked validation
 - Ridge-25 AOA reconstruction
 - exact-overlap 20 m ET production when a raster date is requested
+
+The accepted operational model does not require HLS, Sentinel-1, CHIRPS, FVC
+or albedo. Those sources/variables remain only in reproducibility diagnostics.
 
 ## Field evaluation
 

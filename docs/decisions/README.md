@@ -15,6 +15,7 @@ For the active `experiment-5year` workflow, read these first:
 4. `16_local_tiled_production.md` — local production constraints.
 5. `17_single_entry_pipeline.md` — `scripts/run_pipeline.py` as the normal entry point.
 6. `19_exact_overlap_global_reconciliation.md` — **current final conservation method**.
+7. `20_final_ridge25_dependencies_and_dynamic_results.md` — final accepted inputs and run-result policy.
 
 ## Important superseded production decisions
 

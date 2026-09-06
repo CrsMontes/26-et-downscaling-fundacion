@@ -28,3 +28,14 @@ Rejected predictors, models and workflows are retained when they provide
 scientific evidence for a documented decision. Moving them here is an
 organizational change only; it does not reactivate them. Git history remains
 additional provenance.
+
+
+## Final S2 FVC/albedo recheck
+
+The 2026-09-06 S2-only recheck is implemented by:
+
+    python reproducibility/scripts/recheck_s2_fvc_albedo.py --project <earth-engine-project> --execute
+
+It recalibrates S2 FVC and compares Ridge25 against +albedo, +FVC and
++albedo+FVC without modifying the production configuration. HLS is not part of
+this recheck. The result supported retaining the parsimonious Ridge-25 model.

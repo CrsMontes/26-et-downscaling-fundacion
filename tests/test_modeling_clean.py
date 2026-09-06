@@ -93,3 +93,7 @@ def test_training_module_contains_no_reconciliation_step():
     import et_downscaling.modeling as modeling
 
     assert not hasattr(modeling, "build_modis_constrained_et")
+
+
+def test_ge90_threshold_is_a_method_rule_not_a_population_count():
+    assert OPTICAL_COVERAGE_THRESHOLD_PCT == 90.0

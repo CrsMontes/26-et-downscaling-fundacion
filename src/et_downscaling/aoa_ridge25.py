@@ -1,4 +1,4 @@
-﻿"""Unweighted Area of Applicability for Ridge-25.
+"""Unweighted Area of Applicability for Ridge-25.
 
 Implements the L2 Dissimilarity Index logic of CAST/Meyer & Pebesma
 using the same spatial cross-validation groups as model validation.
@@ -16,7 +16,6 @@ from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import NearestNeighbors
 
 from .ridge25 import RIDGE25_MODEL_FEATURES
-
 
 @dataclass(frozen=True)
 class AOAParameters:

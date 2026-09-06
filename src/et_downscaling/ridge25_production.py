@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import ee
 
-from .optical import build_optical_predictors, filter_optical_period
+from .optical import filter_optical_period
 from .production import (
     ERA5_COLLECTION_ID,
     PROCESSING_BUFFER_M,
@@ -26,7 +26,11 @@ from .ridge25 import (
     RIDGE25_MODEL_FEATURES,
     RIDGE25_OPTICAL_FEATURES,
 )
-from .sentinel2 import get_sentinel2_collection
+from .sentinel2 import (
+    add_s2_spectral_indices,
+    build_s2_medoid,
+    get_sentinel2_collection,
+)
 
 
 RIDGE25_OPTICAL_SOURCE_BANDS = [
@@ -65,11 +69,11 @@ def build_s2_ridge25_predictors(
         geometry=processing_geometry,
         source="S2",
     )
-    predictors = build_optical_predictors(
-        period_collection=period_collection,
-        geometry=processing_geometry,
-        source="S2",
+    medoid = build_s2_medoid(
+        period_collection,
+        processing_geometry,
     )
+    predictors = add_s2_spectral_indices(medoid)
 
     optical = (
         predictors

@@ -1022,10 +1022,9 @@ def main() -> None:
         reference_path,
     ) = load_inputs(root)
 
-    print("Rebuilding frozen Ridge-25 training/validation population...")
+    print("Rebuilding Ridge-25 training/validation population...")
     result = train_and_validate_ridge25(
         master,
-        verify_reference_2020_2024=True,
     )
     print("Training rows:", len(result.population))
     print("Spatial R2:", f"{result.spatial_metrics['R2']:.6f}")

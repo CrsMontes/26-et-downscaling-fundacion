@@ -16,14 +16,15 @@ using standardized Ridge regression (`alpha = 1`) with 25 predictors:
 - 4 seasonal harmonics.
 
 Training uses station × native MODIS footprint × MODIS period observations.
-The final training population contains 799 observations.
+Eligibility is rebuilt from the current source query using the accepted QC
+rules, including Sentinel-2 coverage >= 90%. The resulting training-row count,
+spatial-block OOF metrics, LOYO metrics and numerical AOA threshold are run
+outputs rather than hard-coded algorithm constants. Final manuscript values are
+reported from the designated final scientific run.
 
-Model performance:
-
-| Validation | n | R2 | RMSE | MAE | Bias | KGE |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Spatial block OOF | 799 | 0.383175 | 0.252810 | 0.188848 | -0.016077 | 0.489509 |
-| Leave-one-year-out | 799 | 0.525778 | 0.221669 | 0.163870 | -0.005585 | 0.632719 |
+The operational path queries only the accepted external dependencies: MODIS,
+Sentinel-2 SR Harmonized + Cloud Score+, and ERA5-Land. Sentinel-1, CHIRPS, HLS,
+FVC and albedo are not operational Ridge-25 dependencies.
 
 Fine-resolution ET is generated on a common 20 m grid.
 

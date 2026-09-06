@@ -30,6 +30,15 @@ def parse_arguments():
         default=DEFAULT_OPTICAL_SOURCE,
         choices=["S2", "HLS", "HLS_COMBINED"],
     )
+    parser.add_argument(
+        "--ridge25-only",
+        action="store_true",
+        help=(
+            "Build the accepted Ridge-25 master without requiring "
+            "CHIRPS. Sentinel-1 legacy columns, when present, are ignored "
+            "by final population selection."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -68,7 +77,8 @@ def main():
         "python scripts/export_meteorology_data.py",
     )
     require_file(era5_path, "python scripts/export_meteorology_data.py")
-    require_file(chirps_path, "python scripts/export_meteorology_data.py")
+    if not args.ridge25_only:
+        require_file(chirps_path, "python scripts/export_meteorology_data.py")
 
     print("Loading reusable local inputs...")
     station_dtype = {
@@ -90,9 +100,13 @@ def main():
         dtype=station_dtype,
     )
 
-    chirps_daily = pd.read_csv(
-        chirps_path,
-        dtype=station_dtype,
+    chirps_daily = (
+        None
+        if args.ridge25_only
+        else pd.read_csv(
+            chirps_path,
+            dtype=station_dtype,
+        )
     )
 
     master, daily_reference = build_training_master(
@@ -113,41 +127,28 @@ def main():
     print("Reference-ET complete:", int(master["reference_et_complete"].sum()))
     print("Meteorology complete:", int(master["meteo_complete"].sum()))
     print("Target complete:", int(master["target_complete"].sum()))
-    print(
-        "Satellite extraction complete:",
-        int(
-            master[
-                "satellite_extraction_complete"
-            ].sum()
-        ),
-    )
-
-    for threshold in (80, 90, 99):
-        common_column = (
-            f"training_candidate_common_ge_{threshold}"
-        )
-
-        source_column = (
-            f"training_candidate_source_ge_{threshold}"
-        )
-
+    if args.ridge25_only:
+        print("Final Ridge-25 meteorology source: ERA5-Land only")
+        print("CHIRPS required: NO")
+        print("Sentinel-1 eligibility gate: NO")
+        print("Final optical coverage gate: evaluated in Ridge population (GE90)")
+    else:
         print(
-            f"Common-feature candidates >= {threshold}%:",
-            int(
-                master[
-                    common_column
-                ].sum()
-            ),
+            "Satellite extraction complete:",
+            int(master["satellite_extraction_complete"].sum()),
         )
 
-        print(
-            f"Source-feature candidates >= {threshold}%:",
-            int(
-                master[
-                    source_column
-                ].sum()
-            ),
-        )
+        for threshold in (80, 90, 99):
+            common_column = f"training_candidate_common_ge_{threshold}"
+            source_column = f"training_candidate_source_ge_{threshold}"
+            print(
+                f"Common-feature candidates >= {threshold}%:",
+                int(master[common_column].sum()),
+            )
+            print(
+                f"Source-feature candidates >= {threshold}%:",
+                int(master[source_column].sum()),
+            )
 
     max_reconstruction_error = master["ET_reconstruction_error_mm"].abs().max()
     print("Maximum ET reconstruction error (mm/period):", max_reconstruction_error)

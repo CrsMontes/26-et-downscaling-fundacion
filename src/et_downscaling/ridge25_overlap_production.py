@@ -9,6 +9,7 @@ native-grid MODIS ET using real fine/coarse overlap areas.
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -44,7 +45,7 @@ from .production import (
     PROCESSING_BUFFER_M,
     build_modis_period_context,
 )
-from .ridge25 import RIDGE25_MODEL_FEATURES
+from .ridge25 import RIDGE25_MODEL_FEATURES, extract_ridge25_parameters
 from .ridge25_local_production import (
     DIRECT_DOWNLOAD_MAX_ATTEMPTS,
     OUTPUT_NODATA,
@@ -56,7 +57,7 @@ from .workspace import get_workspace_paths
 
 
 RIDGE25_EXACT_OVERLAP_PRODUCTION_VERSION = (
-    "ridge25_exact_overlap_support90_tol001_v2"
+    "ridge25_cs050_ge90_exact_overlap_support90_tol001_v3"
 )
 
 RAW_TILE_BANDS = [
@@ -79,6 +80,42 @@ OUTPUT_BANDS = [
     "coarse_eligible",
     "ET_conservation_error_mm",
 ]
+
+
+def build_production_scientific_signature(model, aoa_parameters) -> str:
+    """Hash the fitted Ridge and AOA state that define raw fine predictions."""
+    means, scales, coefficients, intercept = extract_ridge25_parameters(
+        model,
+        RIDGE25_MODEL_FEATURES,
+    )
+    digest = hashlib.sha256()
+
+    def update_text(value) -> None:
+        digest.update(str(value).encode("utf-8"))
+        digest.update(b"\0")
+
+    def update_array(value) -> None:
+        array = np.ascontiguousarray(np.asarray(value, dtype="<f8"))
+        digest.update(str(array.shape).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(array.tobytes(order="C"))
+        digest.update(b"\0")
+
+    update_text(RIDGE25_EXACT_OVERLAP_PRODUCTION_VERSION)
+    for name in RIDGE25_MODEL_FEATURES:
+        update_text(name)
+    update_array(means)
+    update_array(scales)
+    update_array(coefficients)
+    update_array([float(intercept)])
+    for name in aoa_parameters.feature_names:
+        update_text(name)
+    update_array(aoa_parameters.means)
+    update_array(aoa_parameters.scales)
+    update_array(aoa_parameters.training_scaled)
+    update_array([float(aoa_parameters.mean_training_distance)])
+    update_array([float(aoa_parameters.threshold)])
+    return digest.hexdigest()
 
 
 def _processing_grid(tile: Tile) -> tuple[float, float, float, float, int, int, Affine]:
@@ -157,6 +194,7 @@ def _build_raw_tile(
     aoa_parameters,
     tile: Tile,
     timeout_seconds: int,
+    scientific_signature: str | None = None,
 ) -> tuple[np.ndarray, dict[str, object]]:
     core = ee.Geometry.Rectangle(
         [tile.xmin, tile.ymin, tile.xmax, tile.ymax],
@@ -247,8 +285,15 @@ def _build_raw_tile(
         axis=0,
     )
 
+    if scientific_signature is None:
+        scientific_signature = build_production_scientific_signature(
+            model,
+            aoa_parameters,
+        )
+
     return output, {
         "production_method_version": RIDGE25_EXACT_OVERLAP_PRODUCTION_VERSION,
+        "scientific_signature": scientific_signature,
         "period_start": period_start,
         "tile_id": tile.tile_id,
         "tile_role": "raw_support",
@@ -300,10 +345,17 @@ def _download_raw_tile(
     tile: Tile,
     tile_directory: Path,
     timeout_seconds: int,
+    scientific_signature: str | None = None,
 ) -> CompletedTile:
     tile_directory.mkdir(parents=True, exist_ok=True)
     path = tile_directory / f"{tile.tile_id}.tif"
     metadata_path = tile_directory / f"{tile.tile_id}.json"
+
+    if scientific_signature is None:
+        scientific_signature = build_production_scientific_signature(
+            model,
+            aoa_parameters,
+        )
 
     if path.is_file() and metadata_path.is_file():
         try:
@@ -311,6 +363,10 @@ def _download_raw_tile(
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
             if metadata.get("production_method_version") != RIDGE25_EXACT_OVERLAP_PRODUCTION_VERSION:
                 raise RuntimeError("Cached tile version mismatch.")
+            if metadata.get("scientific_signature") != scientific_signature:
+                raise RuntimeError("Cached tile scientific signature mismatch.")
+            if metadata.get("period_start") != period_start:
+                raise RuntimeError("Cached tile period mismatch.")
             if metadata.get("tile_role") != "raw_support":
                 raise RuntimeError("Cached tile role mismatch.")
             return CompletedTile(tile, path)
@@ -324,6 +380,7 @@ def _download_raw_tile(
         aoa_parameters=aoa_parameters,
         tile=tile,
         timeout_seconds=timeout_seconds,
+        scientific_signature=scientific_signature,
     )
     temporary = path.with_suffix(".part.tif")
     temporary_meta = metadata_path.with_suffix(".part.json")
@@ -699,6 +756,10 @@ def download_ridge25_basin(
     tile_directory = period_directory / (
         "tiles_" + RIDGE25_EXACT_OVERLAP_PRODUCTION_VERSION
     )
+    scientific_signature = build_production_scientific_signature(
+        model,
+        aoa_parameters,
+    )
 
     completed: list[CompletedTile] = []
     for index, tile in enumerate(support_tiles, start=1):
@@ -714,6 +775,7 @@ def download_ridge25_basin(
                 tile=tile,
                 tile_directory=tile_directory,
                 timeout_seconds=600,
+                scientific_signature=scientific_signature,
             )
         )
 
@@ -742,6 +804,7 @@ def download_ridge25_basin(
     metadata = {
         "period_start": period_start,
         "production_method_version": RIDGE25_EXACT_OVERLAP_PRODUCTION_VERSION,
+        "scientific_signature": scientific_signature,
         "analysis_crs": ANALYSIS_CRS,
         "prediction_scale_m": PREDICTION_SCALE_M,
         "tile_size_m": _normalize_tile_size(tile_size_m),

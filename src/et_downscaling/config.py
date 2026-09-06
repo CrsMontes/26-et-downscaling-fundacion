@@ -184,7 +184,9 @@ def build_training_output_filename(
 # ============================================================
 
 S2_QA_BAND = "cs_cdf"
-S2_CLEAR_THRESHOLD = 0.60
+S2_CLEAR_THRESHOLD = 0.50
+S2_DAILY_MOSAIC_SORT_PROPERTY = "system:index"
+S2_PREPROCESSING_VERSION = "s2-20m-medoid-deterministic-mosaic-v2"
 
 # Retained for notebooks and backward compatibility.
 S2_FULL_COVERAGE = OPTICAL_FULL_COVERAGE

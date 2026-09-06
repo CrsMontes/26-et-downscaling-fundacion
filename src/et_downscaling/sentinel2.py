@@ -7,6 +7,7 @@ from .albedo import (
 from .config import (
     END_DATE,
     S2_CLEAR_THRESHOLD,
+    S2_DAILY_MOSAIC_SORT_PROPERTY,
     S2_QA_BAND,
     START_DATE,
 )
@@ -449,6 +450,9 @@ def build_s2_daily_collection(
             .map(
                 prepare_sentinel2
             )
+            .sort(
+                S2_DAILY_MOSAIC_SORT_PROPERTY
+            )
         )
 
         return (
@@ -609,10 +613,10 @@ def _safe_ratio(
 
 
 # ============================================================
-# Sentinel-2 spectral indices + FVC + albedo
+# Sentinel-2 spectral indices
 # ============================================================
 
-def add_s2_indices(image):
+def add_s2_spectral_indices(image):
     image = ee.Image(
         image
     )
@@ -757,7 +761,7 @@ def add_s2_indices(image):
     )
 
 
-    image_with_indices = (
+    return (
         image
         .addBands(
             [
@@ -773,25 +777,20 @@ def add_s2_indices(image):
     )
 
 
-    # ========================================================
-    # Fractional vegetation cover
-    # ========================================================
+# ============================================================
+# Rich Sentinel-2 diagnostic stack
+# ============================================================
 
-    image_with_fvc = (
-        add_fvc_band(
-            image_with_indices,
-            source="S2",
-        )
+def add_s2_indices(image):
+    """Add spectral indices plus diagnostic FVC and albedo bands.
+
+    Ridge-25 production calls ``add_s2_spectral_indices`` directly so
+    rejected FVC/albedo variables are not computed in the final model path.
+    This richer helper is retained for reproducibility diagnostics.
+    """
+    image_with_indices = add_s2_spectral_indices(image)
+    image_with_fvc = add_fvc_band(
+        image_with_indices,
+        source="S2",
     )
-
-
-    # ========================================================
-    # Shortwave broadband surface albedo
-    # ========================================================
-
-    return (
-        add_s2_albedo(
-            image_with_fvc
-        )
-        .toFloat()
-    )
+    return add_s2_albedo(image_with_fvc).toFloat()

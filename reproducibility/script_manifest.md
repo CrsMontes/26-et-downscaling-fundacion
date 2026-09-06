@@ -5,16 +5,16 @@
 - `scripts/export_meteorology_data.py`
 - `scripts/export_satellite_data.py`
 - `scripts/build_training_dataset.py`
-- `scripts/build_candidate_master.py`
 
 ## Current field evaluation
 - `scripts/evaluate_field_ridge25.py`
 
 ## Full-study reconstruction dependencies
 
-These scripts are used only when rebuilding the five-year candidate
-universe and canonical master from source data. They are not required
-for routine map production when the canonical master already exists.
+These scripts are used only when rebuilding the historical five-year candidate
+universe and selection evidence. They are not dependencies of the accepted
+Ridge-25 operational pipeline.
+- `reproducibility/scripts/build_candidate_master.py`
 - `reproducibility/scripts/build_experimental_feature_store.py`
 - `reproducibility/scripts/build_meteorology_experiment_table.py`
 - `reproducibility/scripts/build_optical_source_populations.py`
@@ -36,6 +36,7 @@ for routine map production when the canonical master already exists.
 - `reproducibility/scripts/evaluate_coverage_threshold_sensitivity.py`
 - `reproducibility/scripts/evaluate_optical_source_experiment.py`
 - `reproducibility/scripts/preflight_fvc_recalibration.py`
+- `reproducibility/scripts/recheck_s2_fvc_albedo.py`
 - `reproducibility/scripts/screen_feature_families.py`
 - `reproducibility/scripts/screen_optical_algorithms.py`
 - `reproducibility/scripts/test_overlap_reconciliation_20220407.py`

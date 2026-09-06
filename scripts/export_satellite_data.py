@@ -39,6 +39,10 @@ from et_downscaling.sentinel1 import (
     get_sentinel1_collection,
 )
 from et_downscaling.workspace import get_workspace_paths
+from et_downscaling.cache_provenance import (
+    validate_satellite_provenance,
+    write_satellite_provenance,
+)
 
 
 # ============================================================
@@ -69,6 +73,15 @@ def parse_arguments():
         help=(
             "Rebuild the final source file and all processing "
             "partitions even if existing outputs are available."
+        ),
+    )
+    parser.add_argument(
+        "--ridge25-only",
+        action="store_true",
+        help=(
+            "Build the accepted Ridge-25 raw satellite cache without "
+            "querying Sentinel-1. Legacy S1 columns remain as explicit "
+            "not-evaluated placeholders for schema compatibility."
         ),
     )
 
@@ -543,8 +556,14 @@ def main():
         final_output.exists()
         and not args.force
     ):
+        validate_satellite_provenance(
+            final_output,
+            optical_source,
+            ridge25_only=args.ridge25_only,
+        )
+
         print(
-            "Raw satellite file already exists:",
+            "Raw satellite file already exists and provenance matches:",
             final_output,
         )
 
@@ -607,9 +626,16 @@ def main():
     )
 
     s1_collection = (
-        get_sentinel1_collection(
+        None
+        if args.ridge25_only
+        else get_sentinel1_collection(
             station_footprints
         )
+    )
+
+    print(
+        "Sentinel-1 queried:",
+        "NO" if args.ridge25_only else "YES",
     )
 
     # ========================================================
@@ -934,8 +960,15 @@ def main():
             f"({number_periods} periods x {len(station_ids)} supports)."
         )
 
+    provenance_path = write_satellite_provenance(
+        final_output,
+        optical_source,
+        ridge25_only=args.ridge25_only,
+    )
+
     # ========================================================
     # Remove checkpoints only after successful final merge
+    # and provenance write.
     # ========================================================
 
     shutil.rmtree(
@@ -945,6 +978,10 @@ def main():
     print(
         "Satellite export completed:",
         final_output,
+    )
+    print(
+        "Satellite provenance:",
+        provenance_path,
     )
 
     print(

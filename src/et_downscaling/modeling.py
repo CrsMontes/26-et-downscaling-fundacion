@@ -50,22 +50,6 @@ MASTER_MODEL_FEATURES = (
     + list(RIDGE25_HARMONIC_FEATURES)
 )
 
-REFERENCE_ROWS_2020_2024 = 799
-REFERENCE_SPATIAL_COUNTS_2020_2024 = {
-    "-811_116": 168,
-    "-814_118": 297,
-    "-814_119": 169,
-    "-815_118": 165,
-}
-REFERENCE_YEAR_COUNTS_2020_2024 = {
-    2020: 171,
-    2021: 151,
-    2022: 142,
-    2023: 185,
-    2024: 150,
-}
-
-
 @dataclass
 class Ridge25Result:
     model: Pipeline
@@ -314,8 +298,6 @@ def canonicalize_master(master: pd.DataFrame) -> pd.DataFrame:
 
 def prepare_ridge25_population(
     master: pd.DataFrame,
-    *,
-    verify_reference_2020_2024: bool = False,
 ) -> pd.DataFrame:
     """Build the final GE90 population without S1/CHIRPS eligibility gates."""
     data = canonicalize_master(master)
@@ -349,39 +331,7 @@ def prepare_ridge25_population(
             "Ridge-25 training matrix contains non-finite values."
         )
 
-    if verify_reference_2020_2024:
-        verify_reference_population(selected)
-
     return selected
-
-
-def verify_reference_population(data: pd.DataFrame) -> None:
-    """Verify exact counts for the accepted five-year gate."""
-    if len(data) != REFERENCE_ROWS_2020_2024:
-        raise RuntimeError(
-            f"Expected {REFERENCE_ROWS_2020_2024} rows, "
-            f"found {len(data)}."
-        )
-
-    spatial_counts = {
-        str(key): int(value)
-        for key, value
-        in data.groupby("spatial_block").size().to_dict().items()
-    }
-    if spatial_counts != REFERENCE_SPATIAL_COUNTS_2020_2024:
-        raise RuntimeError(
-            f"Unexpected spatial population: {spatial_counts}"
-        )
-
-    year_counts = {
-        int(key): int(value)
-        for key, value
-        in data.groupby("year").size().to_dict().items()
-    }
-    if year_counts != REFERENCE_YEAR_COUNTS_2020_2024:
-        raise RuntimeError(
-            f"Unexpected year population: {year_counts}"
-        )
 
 
 def _oof_by_group(
@@ -453,13 +403,10 @@ def _oof_by_group(
 
 def train_and_validate_ridge25(
     master: pd.DataFrame,
-    *,
-    verify_reference_2020_2024: bool = False,
 ) -> Ridge25Result:
     """Run spatial and temporal OOF validation, then fit Ridge on all rows."""
     population = prepare_ridge25_population(
         master,
-        verify_reference_2020_2024=verify_reference_2020_2024,
     )
 
     spatial_oof, spatial_fold_metrics = _oof_by_group(
