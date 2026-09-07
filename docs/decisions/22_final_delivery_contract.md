@@ -67,21 +67,33 @@ so this assumption is visible rather than hidden.
 
 ## Delivery contract
 
-After the definitive run passes QA, a separate packaging step will create one
-`final_delivery` directory containing:
+Generated products remain outside Git and are reproducible from the repository
+plus the three canonical portable inputs and the required remote source data.
+The scientific multiband rasters, run tables, diagnostics and metadata remain in
+the external `current/` workspace where the production pipeline creates them.
+They are not duplicated into a second delivery tree.
 
-- the three multiband 20 m scientific GeoTIFFs and per-period metadata;
-- one-band ET-only convenience GeoTIFFs derived from band 1 of each scientific
-  product (no new ET calculation);
-- final model/validation, persistence, field and raster-QA tables;
-- manuscript-ready figures;
-- one read-only `final_results_visualization.ipynb` and its HTML export;
-- final run metadata, manifest, README and SHA-256 checksums.
+After the definitive run passes QA, a lightweight local finalization step creates
+only `ET_fundacion_workspace/final/` with:
 
-The final visualization notebook will not train a model, query Earth Engine,
-modify rasters or make methodological decisions. It will read only frozen final
-outputs. The existing scientific-diagnostics notebook remains exploratory and
-historical.
+- `ET_2020-03-13_20m.tif`;
+- `ET_2021-11-25_20m.tif`;
+- `ET_2022-03-30_20m.tif`;
+- `raster_summary.csv`;
+- `final_results_visualization.ipynb`.
+
+The three ET-only GeoTIFFs are exact band-1 copies of the frozen scientific
+multiband products; no ET is recalculated. `raster_summary.csv` records basic
+published-support and common-three-date-support statistics. The notebook is a
+read-only local visualizer and does not train, query Earth Engine, reconcile,
+modify products, or export manuscript-specific figures or tables. Additional
+publication graphics and tables are intentionally produced manually from the
+frozen local outputs when needed.
+
+No delivery README, separate manifest, checksum table, manuscript directory,
+HTML export, duplicated scientific rasters, raw caches or tile intermediates are
+created by this finalization step. Scientific provenance and SHA-256 hashes
+remain in the production run's `run_metadata.json`.
 
 ## Decision
 

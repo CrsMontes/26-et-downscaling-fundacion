@@ -40,3 +40,15 @@ commands. They are retained under:
     reproducibility/scripts/
 
 See `reproducibility/script_manifest.md` and `docs/decisions/README.md`.
+
+## Minimal local final outputs
+
+After a three-period production run has passed QA:
+
+    python scripts/build_final_outputs.py
+
+This is a packaging/visualization step only. It derives exact one-band ET copies
+from scientific raster band 1 and writes only the three ET GeoTIFFs,
+`raster_summary.csv`, and the read-only visualization notebook under the
+external `ET_fundacion_workspace/final/` directory. It does not recalculate ET
+or duplicate the scientific multiband products.

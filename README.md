@@ -89,7 +89,24 @@ The default pipeline:
 
 Use --refresh-raw only for an intentional complete re-extraction.
 Use --no-raster for training and validation without raster production.
-Use --raster-date YYYY-MM-DD for non-interactive raster production.
+Use repeated --raster-date YYYY-MM-DD arguments for multi-period production.
+
+The frozen three-period production command is:
+
+    python scripts/run_pipeline.py --project <earth-engine-project> \
+        --raster-date 2020-03-13 \
+        --raster-date 2021-11-25 \
+        --raster-date 2022-03-30
+
+After a complete run passes QA, create the minimal local final view with:
+
+    python scripts/build_final_outputs.py
+
+This creates only three one-band ET GeoTIFFs, `raster_summary.csv`, and a
+read-only visualization notebook under `ET_fundacion_workspace/final/`. The
+scientific multiband rasters, diagnostics, tables, metadata and SHA-256
+provenance remain in `ET_fundacion_workspace/current/` and are not duplicated.
+Generated products are not versioned in Git.
 
 All generated files are written outside the Git repository under the external
 ET_fundacion_workspace. Google Drive is not used for outputs and no persistent
