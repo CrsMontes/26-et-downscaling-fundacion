@@ -140,3 +140,48 @@ def test_small_negative_floor_must_still_meet_conservation_tolerance():
 
     assert result.max_abs_error_after_nonnegative_mm <= 0.01
     assert (result.et_final_nonnegative >= 0).all()
+
+
+def test_publication_mask_does_not_redefine_conservation_scope():
+    """Exact MODIS conservation applies before the publication mask."""
+    kc_raw = np.array([[1.0, 2.0, 3.0]], dtype=float)
+    usable = np.array([[True, True, False]], dtype=bool)
+    modis_et = np.array([[10.0, 20.0]], dtype=float)
+
+    edges = OverlapEdges(
+        coarse_index=np.array([0, 0, 1, 1], dtype=np.int32),
+        fine_index=np.array([0, 1, 1, 2], dtype=np.int32),
+        overlap_area_m2=np.array([400.0, 400.0, 100.0, 700.0]),
+        represented_coarse=np.array([[True, True]], dtype=bool),
+    )
+
+    result = solve_overlap_reconciliation(
+        kc_raw=kc_raw,
+        usable=usable,
+        modis_et=modis_et,
+        edges=edges,
+        usable_support_fraction=0.90,
+        tolerance_mm=0.01,
+    )
+
+    full_reaggregated = np.asarray(
+        result.constraint_matrix @ result.et_final_nonnegative
+    ).ravel()
+    np.testing.assert_allclose(
+        full_reaggregated,
+        result.target,
+        rtol=0,
+        atol=1e-10,
+    )
+
+    row = result.constraint_matrix.getrow(0).toarray().ravel()
+    selected = result.publishable_active & (row > 0)
+    published_weight = float(row[selected].sum())
+    published_mean = float(
+        np.sum(row[selected] * result.et_final_nonnegative[selected])
+        / published_weight
+    )
+
+    assert result.publishable_active.tolist() == [True, False]
+    assert np.isclose(published_weight, 0.5)
+    assert not np.isclose(published_mean, float(result.target[0]))

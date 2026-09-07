@@ -81,6 +81,13 @@ OUTPUT_BANDS = [
     "ET_conservation_error_mm",
 ]
 
+CONSERVATION_SCOPE = (
+    "full_reconciled_modis_support_before_publication_mask"
+)
+PUBLISHED_RASTER_CONSERVATION = (
+    "not_guaranteed_after_publication_mask"
+)
+
 
 def build_production_scientific_signature(model, aoa_parameters) -> str:
     """Hash the fitted Ridge and AOA state that define raw fine predictions."""
@@ -724,6 +731,11 @@ def _reconcile_raw_mosaic(
         "eligible_modis_parents": int(result.eligible_coarse.size),
         "active_fine_cells": int(result.active_fine.size),
         "publishable_active_cells_support": int(result.publishable_active.sum()),
+        "publishable_active_fraction_of_active_support": (
+            float(result.publishable_active.sum() / result.active_fine.size)
+            if result.active_fine.size
+            else float("nan")
+        ),
         "published_basin_pixels": int(published.size),
         "negative_active_before_floor": int(result.negative_active_cells),
         "negative_publishable_before_floor": int(result.negative_publishable_cells),
@@ -814,6 +826,8 @@ def download_ridge25_basin(
         "output_bands": OUTPUT_BANDS,
         "usable_support_fraction": RIDGE25_USABLE_SUPPORT_FRACTION,
         "conservation_tolerance_mm": RIDGE25_RECONCILIATION_TOLERANCE_MM,
+        "conservation_scope": CONSERVATION_SCOPE,
+        "published_raster_conservation": PUBLISHED_RASTER_CONSERVATION,
         "applicability_rule": "complete_stack AND AOA_inside AND Kc_raw >= 0",
         "reconciliation": "single_global_exact_overlap_after_raw_mosaic",
         "negative_et_rule": "floor_once_to_zero_then_fail_if_conservation_exceeds_tolerance",

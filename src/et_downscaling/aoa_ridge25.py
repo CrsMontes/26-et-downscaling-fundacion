@@ -1,8 +1,9 @@
-"""Unweighted Area of Applicability for Ridge-25.
+"""Equal-weight applicability domain for Ridge-25.
 
-Implements the L2 Dissimilarity Index logic of CAST/Meyer & Pebesma
-using the same spatial cross-validation groups as model validation.
-All 25 standardized predictors receive equal weight.
+Implements an unweighted L2 Dissimilarity Index adapted from the
+Meyer-Pebesma Area of Applicability framework, using the same spatial
+cross-validation groups as model validation. All 25 standardized predictors
+receive equal weight; this is not the model-importance-weighted AOA variant.
 """
 
 from __future__ import annotations

@@ -7,7 +7,9 @@ from et_downscaling.aoa_ridge25 import AOAParameters
 from et_downscaling.local_tiles import Tile
 from et_downscaling.ridge25 import build_ridge25_model
 from et_downscaling.ridge25_overlap_production import (
+    CONSERVATION_SCOPE,
     OUTPUT_BANDS,
+    PUBLISHED_RASTER_CONSERVATION,
     RAW_TILE_BANDS,
     RIDGE25_EXACT_OVERLAP_PRODUCTION_VERSION,
     _support_tiles,
@@ -27,6 +29,12 @@ def test_exact_overlap_production_contract():
         "usable",
         "support_domain",
     ]
+    assert CONSERVATION_SCOPE == (
+        "full_reconciled_modis_support_before_publication_mask"
+    )
+    assert PUBLISHED_RASTER_CONSERVATION == (
+        "not_guaranteed_after_publication_mask"
+    )
     assert OUTPUT_BANDS == [
         "ET_mm_period",
         "Kc_raw",

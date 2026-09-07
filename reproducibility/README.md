@@ -8,9 +8,9 @@ The default operational workflow is not here. It is:
 
     python scripts/run_pipeline.py --project <earth-engine-project>
 
-The current field comparison is:
+The current complete field comparison is:
 
-    python scripts/evaluate_field_ridge25.py --project <earth-engine-project>
+    python scripts/run_field_evaluation.py --project <earth-engine-project>
 
 ## Layout
 
@@ -39,3 +39,15 @@ The 2026-09-06 S2-only recheck is implemented by:
 It recalibrates S2 FVC and compares Ridge25 against +albedo, +FVC and
 +albedo+FVC without modifying the production configuration. HLS is not part of
 this recheck. The result supported retaining the parsimonious Ridge-25 model.
+
+## Final closure diagnostics
+
+Two final audit scripts are retained as non-production evidence:
+
+    python reproducibility/scripts/run_closure_diagnostics.py
+    python reproducibility/scripts/run_aoa_map_sensitivity.py --project <earth-engine-project> --dates 2020-03-13
+
+The offline script reproduces the equal-weight versus coefficient-weighted DI
+sensitivity, explicit persistence baselines and field valid-day sensitivity.
+The map script was used only to quantify the spatial impact of the alternative
+coefficient-weighted DI and is not part of routine production.

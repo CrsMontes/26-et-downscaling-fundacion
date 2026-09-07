@@ -7,7 +7,7 @@ to avoid rewriting provenance.
 
 ## Current authoritative path
 
-For the active `experiment-5year` workflow, read these first:
+For the active `main` Ridge-25 workflow, read these first:
 
 1. `11_final_kc_model.md` — model-selection basis.
 2. `13_ridge25_final_model.md` — final Ridge-25 specification.
@@ -16,6 +16,7 @@ For the active `experiment-5year` workflow, read these first:
 5. `17_single_entry_pipeline.md` — `scripts/run_pipeline.py` as the normal entry point.
 6. `19_exact_overlap_global_reconciliation.md` — **current final conservation method**.
 7. `20_final_ridge25_dependencies_and_dynamic_results.md` — final accepted inputs and run-result policy.
+8. `21_final_audit_closure.md` — final AOA, persistence, field-QC, conservation-scope and provenance closure.
 
 ## Important superseded production decisions
 

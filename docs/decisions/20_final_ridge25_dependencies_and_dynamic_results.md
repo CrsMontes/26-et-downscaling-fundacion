@@ -67,3 +67,13 @@ normal pipeline may refresh its accepted external sources and regenerate its
 training population. Provenance records what each run actually produced.
 Rejected sources remain available only as reproducibility evidence and do not
 form operational dependencies.
+
+
+## Provenance hardening after final audit
+
+The final audit confirmed that query-dependent numerical results must remain
+run outputs. New runs therefore record the Git commit/dirty state and SHA-256
+hashes for the three canonical repository inputs, the raw training source
+caches, the rebuilt training master, `environment-lock.yml`, and the generated
+run tables/AOA/figures. This does not freeze remote collections; it makes the
+exact local realization of each scientific run auditable.

@@ -7,7 +7,11 @@
 - `scripts/build_training_dataset.py`
 
 ## Current field evaluation
+- `scripts/run_field_evaluation.py`
 - `scripts/evaluate_field_ridge25.py`
+- `scripts/evaluate_field_external_st04.py`
+- `scripts/compare_field_with_without_aoa.py`
+- `scripts/build_field_comparison_scenarios.py`
 
 ## Full-study reconstruction dependencies
 
@@ -40,7 +44,18 @@ Ridge-25 operational pipeline.
 - `reproducibility/scripts/screen_feature_families.py`
 - `reproducibility/scripts/screen_optical_algorithms.py`
 - `reproducibility/scripts/test_overlap_reconciliation_20220407.py`
+- `reproducibility/scripts/run_closure_diagnostics.py`
+- `reproducibility/scripts/run_aoa_map_sensitivity.py`
 
 Routine map production must not execute unused candidate experiments.
 A clean full-study reconstruction may execute the reconstruction
 dependencies listed above.
+
+## Final audit closure diagnostics
+
+`run_closure_diagnostics.py` is an offline audit only. It reproduces the
+equal-weight versus absolute-standardized-Ridge-coefficient DI sensitivity,
+three explicit persistence definitions, and the 5/8 versus 8/8 field-valid-day
+sensitivity. `run_aoa_map_sensitivity.py` is a potentially expensive direct
+Earth Engine map diagnostic used to quantify spatial disagreement between the
+two DI variants. Neither script is called by production.

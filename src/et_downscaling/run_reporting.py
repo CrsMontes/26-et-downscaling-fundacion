@@ -76,6 +76,68 @@ def _baseline_oof(
     return output
 
 
+
+def _persistence_baseline_metrics(
+    population: pd.DataFrame,
+    spatial_oof: pd.DataFrame,
+) -> pd.DataFrame:
+    """Compare temporal Kc persistence with Ridge on exactly matched rows."""
+    frame = population[
+        ["station_id", "period_start", TARGET_COLUMN]
+    ].copy()
+    frame["period_start"] = pd.to_datetime(frame["period_start"])
+    frame = frame.sort_values(["station_id", "period_start"])
+    grouped = frame.groupby("station_id", sort=False)
+    frame["previous_Kc"] = grouped[TARGET_COLUMN].shift(1)
+    frame["previous_period_start"] = grouped["period_start"].shift(1)
+    frame["gap_days"] = (
+        frame["period_start"] - frame["previous_period_start"]
+    ).dt.days
+
+    oof = spatial_oof[
+        ["station_id", "period_start", "prediction"]
+    ].copy()
+    oof["period_start"] = pd.to_datetime(oof["period_start"])
+    frame = frame.merge(
+        oof,
+        on=["station_id", "period_start"],
+        how="left",
+        validate="one_to_one",
+    )
+    if frame["prediction"].isna().any():
+        raise ValueError(
+            "Spatial OOF predictions do not cover persistence rows."
+        )
+
+    masks = {
+        "previous_available_observation": frame["previous_Kc"].notna(),
+        "strict_previous_8day_composite": (
+            frame["previous_Kc"].notna() & frame["gap_days"].eq(8)
+        ),
+        "previous_observation_within_16days": (
+            frame["previous_Kc"].notna() & frame["gap_days"].le(16)
+        ),
+    }
+
+    rows = []
+    for definition, mask in masks.items():
+        subset = frame.loc[mask]
+        for model_name, prediction_column in (
+            ("persistence", "previous_Kc"),
+            ("Ridge25_spatial_OOF", "prediction"),
+        ):
+            rows.append(
+                {
+                    "definition": definition,
+                    "model": model_name,
+                    **calculate_metrics(
+                        subset[TARGET_COLUMN],
+                        subset[prediction_column],
+                    ),
+                }
+            )
+    return pd.DataFrame(rows)
+
 def _model_parameter_table(
     result: Ridge25Result,
 ) -> pd.DataFrame:
@@ -160,6 +222,10 @@ def save_run_tables(
         "baseline_metrics": (
             table_directory
             / "mean_baseline_metrics.csv"
+        ),
+        "persistence_metrics": (
+            table_directory
+            / "persistence_baseline_metrics.csv"
         ),
     }
 
@@ -246,6 +312,14 @@ def save_run_tables(
         index=False,
     )
 
+    _persistence_baseline_metrics(
+        result.population,
+        result.spatial_oof,
+    ).to_csv(
+        paths["persistence_metrics"],
+        index=False,
+    )
+
     return paths
 
 
@@ -305,8 +379,10 @@ def save_aoa_artifacts(
                 ),
                 "threshold": float(parameters.threshold),
                 "definition": (
-                    "unweighted standardized Euclidean DI with "
-                    "leave-one-spatial-block-out training DI threshold"
+                    "equal-weight standardized Euclidean DI adapted from the "
+                    "Meyer-Pebesma AOA framework, with a leave-one-spatial-"
+                    "block-out training DI threshold; predictors are not "
+                    "weighted by model importance"
                 ),
             },
             indent=2,

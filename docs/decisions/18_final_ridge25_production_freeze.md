@@ -1,5 +1,8 @@
 ﻿# Final Ridge-25 production workflow
 
+> **Superseded production snapshot.** This file preserves the pre-exact-overlap freeze. Where it conflicts with Decisions 19 and 21, the later decisions are authoritative.
+
+
 ## Status
 
 The 20 m production implementation was frozen after successful full-basin

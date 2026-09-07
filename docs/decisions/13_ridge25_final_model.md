@@ -1,5 +1,8 @@
 # Decision 13 - Final primary Kc model: Ridge-25
 
+> **Historical result snapshot.** The 799-row metrics below document the model-selection stage and are not the current clean-run values. Current run values are recorded in Decision 21 and `run_metadata.json`.
+
+
 ## Problem
 
 The previous closed workflow used a 25-predictor Random Forest requiring

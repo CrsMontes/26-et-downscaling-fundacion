@@ -31,9 +31,17 @@ Fine-resolution ET is generated on a common 20 m grid.
 Publication requires:
 
 - complete Ridge-25 predictor stack;
-- inside the Ridge-25 area of applicability (AOA);
+- inside the equal-weight multivariate applicability domain, implemented as a
+  standardized Euclidean dissimilarity index adapted from the
+  Meyer-Pebesma AOA framework and using the spatial validation blocks;
 - `Kc_raw >= 0`;
 - usable support fraction >= 0.90 within the native MODIS parent.
+
+The applicability domain deliberately gives equal weight to all 25 standardized
+predictors. A final sensitivity using absolute standardized Ridge coefficients
+as weights changed 17.68% of valid basin pixels on 2020-03-13 and was strongly
+dominated by the correlated optical predictor block, without evidence of
+better separation of spatial OOF errors. It was therefore not adopted.
 
 For eligible MODIS parents, the final product uses one global exact-overlap
 reconciliation after the raw 20 m support mosaic has been assembled. Real
@@ -45,17 +53,25 @@ Small negative ET values produced by the unconstrained global projection are
 floored once to zero. The date is accepted only if the exact-overlap
 conservation error remains <= 0.01 mm per MODIS period. Production uses fixed
 4000 m raw-support tiles plus an external halo, followed by one global
-reconciliation and final basin clipping.
+reconciliation and final basin clipping. Exact MODIS conservation applies to
+the complete reconciled fine support before the final publication mask. The
+masked published subset is not expected to reaggregate exactly to MODIS.
 
 The accepted production version is
-`ridge25_exact_overlap_support90_tol001_v2`.
+`ridge25_cs050_ge90_exact_overlap_support90_tol001_v3`.
+
+The designated audited run `20260906T192839Z_2020_2024` contains 833 training
+rows. Spatial-block OOF performance was R2=0.393749, RMSE=0.249689 and
+MAE=0.185496 Kc units; LOYO R2 was 0.527433. These values are run outputs, not
+hard-coded algorithm constants.
 
 Field comparison is a separate evaluation, not a validation of the complete
-20 m raster domain. In the current fixed-Kc main subset (ST01-ST03, n=10),
-MODIS and the downscaled product show similar overall error: RMSE 9.034 versus
-8.746 mm per period, respectively. The downscaled product does not show a
-consistent accuracy improvement across metrics or stations. No independent
-20 m validation claim is made.
+20 m raster domain. With the accepted AOA, the all-cover field-proxy scenario
+contains n=17 observations (Ridge RMSE 11.767 versus MODIS 12.397 mm per
+period). The pre-specified fixed-Kc ST01-ST03 subset contains n=9 (Ridge RMSE
+8.985 versus MODIS 9.420 mm per period). Results are mixed across metrics and
+do not demonstrate a consistent accuracy improvement over MODIS. No
+independent 20 m validation claim is made.
 ## Run
 
 Create the environment and install the repository in editable mode, then:
@@ -97,7 +113,13 @@ Scripts used to evaluate alternative predictors, models and methodological choic
 
 Rejected or superseded experiments are retained when they provide evidence for a methodological decision.
 
-See reproducibility/README.md, reproducibility/script_manifest.md, docs/decisions/ and docs/METHODOLOGY_EVOLUTION.md.
+Each new run records the Git commit and dirty state, SHA-256 hashes of the
+three canonical repository inputs, the raw training-source caches, the rebuilt
+master, `environment-lock.yml`, and the run-generated tables/AOA/figures in
+`run_metadata.json`.
+
+See reproducibility/README.md, reproducibility/script_manifest.md,
+docs/decisions/ and docs/METHODOLOGY_EVOLUTION.md.
 
 ## Field evaluation
 

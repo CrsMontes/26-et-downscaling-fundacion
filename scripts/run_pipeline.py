@@ -335,6 +335,7 @@ def main() -> None:
         S2_CLEAR_THRESHOLD,
         S2_DAILY_MOSAIC_SORT_PROPERTY,
         S2_PREPROCESSING_VERSION,
+        build_satellite_output_filename,
         build_training_output_filename,
     )
     from et_downscaling.aoa_ridge25 import (
@@ -355,6 +356,9 @@ def main() -> None:
         save_core_figures,
         save_model_metadata,
         save_run_tables,
+    )
+    from et_downscaling.run_provenance import (
+        build_run_provenance,
     )
     from et_downscaling.workspace import (
         get_workspace_paths,
@@ -449,6 +453,24 @@ def main() -> None:
         / "S2"
         / build_training_output_filename("S2")
     )
+    training_sources = {
+        "satellite_footprint": (
+            workspace.raw_cache
+            / "satellite"
+            / "S2"
+            / build_satellite_output_filename("S2")
+        ),
+        "era5_hourly": (
+            workspace.raw_cache
+            / "meteorology"
+            / f"era5_hourly_{OUTPUT_PERIOD_LABEL}.csv"
+        ),
+        "station_support": (
+            workspace.raw_cache
+            / "meteorology"
+            / "station_support.csv"
+        ),
+    }
 
     master = build_final_training_master(
         project_root=project_root,
@@ -527,54 +549,33 @@ def main() -> None:
         run_directory,
     )
 
-    metadata_path = save_model_metadata(
-        result,
-        run_directory,
-        {
-            "run_id": run_id,
-            "analysis_start": args.start_date,
-            "analysis_end_exclusive": (
-                args.end_date_exclusive
-            ),
-            "period_label": (
-                OUTPUT_PERIOD_LABEL
-            ),
-            "master_path": str(
-                master_path
-            ),
-            "workspace": str(
-                workspace.root
-            ),
-            "earth_engine_project": (
-                project_id
-            ),
-            "raw_refreshed": bool(
-                args.refresh_raw
-            ),
-            "sentinel2_cloud_score_clear_threshold": float(
-                S2_CLEAR_THRESHOLD
-            ),
-            "sentinel2_daily_mosaic_sort_property": (
-                S2_DAILY_MOSAIC_SORT_PROPERTY
-            ),
-            "sentinel2_preprocessing_version": (
-                S2_PREPROCESSING_VERSION
-            ),
-            "training_optical_coverage_threshold_pct": float(
-                OPTICAL_COVERAGE_THRESHOLD_PCT
-            ),
-            "aoa_threshold": float(
-                aoa_parameters.threshold
-            ),
-            "usable_support_fraction": float(
-                RIDGE25_USABLE_SUPPORT_FRACTION
-            ),
-            "reconciliation": "single_global_exact_overlap",
-            "google_drive_used": False,
-            "earth_engine_persistent_asset_created": False,
-            "reconciliation_used_in_training": False,
-        },
-    )
+    run_metadata = {
+        "run_id": run_id,
+        "analysis_start": args.start_date,
+        "analysis_end_exclusive": args.end_date_exclusive,
+        "period_label": OUTPUT_PERIOD_LABEL,
+        "master_path": str(master_path),
+        "workspace": str(workspace.root),
+        "earth_engine_project": project_id,
+        "raw_refreshed": bool(args.refresh_raw),
+        "sentinel2_cloud_score_clear_threshold": float(S2_CLEAR_THRESHOLD),
+        "sentinel2_daily_mosaic_sort_property": S2_DAILY_MOSAIC_SORT_PROPERTY,
+        "sentinel2_preprocessing_version": S2_PREPROCESSING_VERSION,
+        "training_optical_coverage_threshold_pct": float(
+            OPTICAL_COVERAGE_THRESHOLD_PCT
+        ),
+        "aoa_threshold": float(aoa_parameters.threshold),
+        "aoa_definition": (
+            "equal-weight standardized Euclidean DI adapted from the "
+            "Meyer-Pebesma AOA framework; threshold from spatial-block "
+            "cross-validation training DI"
+        ),
+        "usable_support_fraction": float(RIDGE25_USABLE_SUPPORT_FRACTION),
+        "reconciliation": "single_global_exact_overlap",
+        "google_drive_used": False,
+        "earth_engine_persistent_asset_created": False,
+        "reconciliation_used_in_training": False,
+    }
 
     figure_paths = {}
     if not args.no_figures:
@@ -582,6 +583,24 @@ def main() -> None:
             result,
             run_directory,
         )
+
+    output_paths = {
+        **{f"table:{key}": value for key, value in table_paths.items()},
+        **{f"aoa:{key}": value for key, value in aoa_paths.items()},
+        **{f"figure:{key}": value for key, value in figure_paths.items()},
+    }
+    run_metadata["provenance"] = build_run_provenance(
+        project_root=project_root,
+        canonical_inputs=inputs,
+        training_sources=training_sources,
+        master_path=master_path,
+        output_paths=output_paths,
+    )
+    metadata_path = save_model_metadata(
+        result,
+        run_directory,
+        run_metadata,
+    )
 
     print()
     print("=== CURRENT-RUN OUTPUTS ===")

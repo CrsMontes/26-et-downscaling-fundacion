@@ -1,5 +1,8 @@
 # Decision 19 — Exact-overlap global MODIS reconciliation
 
+> **Current method, historical acceptance numbers.** Exact-overlap reconciliation remains authoritative, but the `v2` product name and n=10 field counts in the original end-to-end acceptance section are historical. Current product naming, field scenarios and conservation scope are recorded in Decision 21.
+
+
 ## Status
 
 Accepted and end-to-end tested as the final reconciliation design. The

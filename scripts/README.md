@@ -22,9 +22,12 @@ or albedo. Those sources/variables remain only in reproducibility diagnostics.
 
 ## Field evaluation
 
-The current spatial-OOF field comparison is:
+The current complete field-comparison entry point is:
 
-    python scripts/evaluate_field_ridge25.py --project <earth-engine-project>
+    python scripts/run_field_evaluation.py --project <earth-engine-project>
+
+It orchestrates the in-basin spatial-OOF exact-overlap evaluation, external
+ST04 handling, the AOA-only sensitivity, and the final scenario tables.
 
 Field observations are used only for the separate comparison phase and do not
 constitute independent validation of the full 20 m raster domain.
