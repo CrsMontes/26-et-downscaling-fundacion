@@ -30,3 +30,4 @@ For the active `main` Ridge-25 workflow, read these first:
 
 All other decision files remain evidence for target definition, predictor
 selection, spatial support, meteorology, AOA and rejected alternatives.
+- [Decision 22 — Final execution and delivery contract](22_final_delivery_contract.md)

@@ -37,7 +37,7 @@ def test_final_pipeline_trains_before_optional_raster():
         "result = train_and_validate_ridge25("
     )
     raster_index = source.index(
-        "product = download_ridge25_basin("
+        "download_ridge25_basin("
     )
 
     assert training_index < raster_index
@@ -65,7 +65,7 @@ def test_final_pipeline_builds_aoa_before_optional_raster():
     ).read_text(encoding="utf-8")
 
     aoa_index = source.index("aoa_parameters = build_unweighted_aoa(")
-    raster_index = source.index("product = download_ridge25_basin(")
+    raster_index = source.index("download_ridge25_basin(")
     assert aoa_index < raster_index
 
 
@@ -104,3 +104,53 @@ def test_ridge25_spatial_production_does_not_compute_rejected_fvc_albedo():
     assert "add_s2_indices" not in source
     assert "add_fvc_band" not in source
     assert "add_s2_albedo" not in source
+
+
+def test_final_pipeline_supports_repeated_raster_dates():
+    project_root = Path(__file__).resolve().parents[1]
+    source = (project_root / "scripts" / "run_pipeline.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'dest="raster_dates"' in source
+    assert 'action="append"' in source
+    assert "for raster_date in requested_raster_dates:" in source
+
+
+def test_final_pipeline_finalizes_provenance_after_raster_production():
+    project_root = Path(__file__).resolve().parents[1]
+    source = (project_root / "scripts" / "run_pipeline.py").read_text(
+        encoding="utf-8"
+    )
+
+    raster_index = source.index(
+        "raster_products[raster_date] = download_ridge25_basin("
+    )
+    provenance_index = source.index(
+        'run_metadata["provenance"] = build_run_provenance('
+    )
+    metadata_index = source.index("metadata_path = save_model_metadata(")
+
+    assert raster_index < provenance_index < metadata_index
+
+
+def test_final_pipeline_hashes_field_and_final_raster_outputs():
+    project_root = Path(__file__).resolve().parents[1]
+    source = (project_root / "scripts" / "run_pipeline.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'f"field:{key}"' in source
+    assert 'f"raster:{period}:scientific"' in source
+    assert 'f"raster:{period}:manifest"' in source
+    assert 'f"raster:{period}:metadata"' in source
+
+
+def test_legacy_random_forest_model_spec_is_not_labeled_final_source_of_truth():
+    project_root = Path(__file__).resolve().parents[1]
+    source = (
+        project_root / "src" / "et_downscaling" / "model_spec.py"
+    ).read_text(encoding="utf-8")
+
+    assert "Legacy Random-Forest specification" in source
+    assert "source of truth for the accepted Ridge-25 model" in source

@@ -11,8 +11,10 @@ Scientific execution
 6. Save current-run tables, AOA parameters, metadata and core diagnostics.
 7. Run the final field-comparison phase using spatial-OOF fine ET; field
    observations never enter Ridge-25 training.
-8. Optionally generate one locally downloaded 20 m ET raster followed by the
-   single global exact-overlap MODIS reconciliation.
+8. Optionally generate one or more locally downloaded 20 m ET rasters from the
+   same fitted Ridge-25/AOA state, each followed by the single global
+   exact-overlap MODIS reconciliation.
+9. Finalize run provenance only after field and raster outputs exist.
 
 A fitted model is never loaded from disk. Reconciliation is never used during
 training or OOF validation. Google Drive and persistent Earth Engine assets are
@@ -76,10 +78,13 @@ def parse_arguments():
     )
     parser.add_argument(
         "--raster-date",
-        default=None,
+        dest="raster_dates",
+        action="append",
+        default=[],
         help=(
-            "Generate one MODIS-period ET raster without an "
-            "interactive prompt (YYYY-MM-DD)."
+            "Generate a MODIS-period ET raster without an interactive prompt "
+            "(YYYY-MM-DD). Repeat this option to produce multiple periods "
+            "from the same fitted model/AOA state."
         ),
     )
     parser.add_argument(
@@ -264,27 +269,116 @@ def ask_yes_no(
     }
 
 
-def resolve_raster_date(
-    args,
-) -> str | None:
-    if args.no_raster:
-        return None
+def _validate_raster_date(value: str) -> str:
+    text = str(value).strip()
+    try:
+        datetime.strptime(text, "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid raster date {text!r}; expected YYYY-MM-DD."
+        ) from exc
+    return text
 
-    if args.raster_date:
-        return args.raster_date
+
+def resolve_raster_dates(
+    args,
+) -> list[str]:
+    if args.no_raster:
+        if args.raster_dates:
+            raise ValueError(
+                "--no-raster cannot be combined with --raster-date."
+            )
+        return []
+
+    if args.raster_dates:
+        values = [_validate_raster_date(value) for value in args.raster_dates]
+        return list(dict.fromkeys(values))
 
     if not ask_yes_no(
         "Generate a 20 m ET raster now?",
         default=False,
     ):
-        return None
+        return []
 
     value = input(
         "MODIS period start [YYYY-MM-DD]: "
     ).strip()
     if not value:
-        return None
-    return value
+        return []
+    return [_validate_raster_date(value)]
+
+
+def collect_field_output_paths(workspace) -> dict[str, Path]:
+    """Return final field products that exist after field evaluation."""
+    candidates = {
+        "comparison_scenarios": (
+            workspace.diagnostics
+            / "field_ridge25_final_scenarios"
+            / "field_comparison_scenarios.csv"
+        ),
+        "scenario_definitions": (
+            workspace.diagnostics
+            / "field_ridge25_final_scenarios"
+            / "field_scenario_definitions.csv"
+        ),
+        "scenario_metrics": (
+            workspace.diagnostics
+            / "field_ridge25_final_scenarios"
+            / "field_scenario_metrics.csv"
+        ),
+        "temporal_completeness_sensitivity": (
+            workspace.diagnostics
+            / "field_ridge25_final_scenarios"
+            / "field_temporal_completeness_sensitivity.csv"
+        ),
+        "aoa_sensitivity": (
+            workspace.diagnostics
+            / "field_ridge25_aoa_sensitivity"
+            / "field_ridge25_with_vs_without_aoa.csv"
+        ),
+        "oof_pairs": (
+            workspace.diagnostics
+            / "field_ridge25_oof_exact_overlap"
+            / "field_ridge25_oof_pairs.csv"
+        ),
+        "oof_metrics": (
+            workspace.diagnostics
+            / "field_ridge25_oof_exact_overlap"
+            / "field_ridge25_oof_metrics.csv"
+        ),
+        "oof_by_station": (
+            workspace.diagnostics
+            / "field_ridge25_oof_exact_overlap"
+            / "field_ridge25_oof_by_station.csv"
+        ),
+        "field_reference_audit": (
+            workspace.diagnostics
+            / "field_ridge25_oof_exact_overlap"
+            / "field_reference_et_audit.csv"
+        ),
+        "field_period_candidates": (
+            workspace.diagnostics
+            / "field_ridge25_oof_exact_overlap"
+            / "field_period_candidates.csv"
+        ),
+        "field_metadata": (
+            workspace.diagnostics
+            / "field_ridge25_oof_exact_overlap"
+            / "metadata.json"
+        ),
+        "st04_external_diagnostic": (
+            workspace.diagnostics
+            / "field_ridge25_oof_exact_overlap_external_st04_era5_nearest"
+            / "st04_external_fine_nearest_era5_diagnostic.csv"
+        ),
+    }
+    missing = [str(path) for path in candidates.values() if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(
+            "Final field evaluation did not create the complete output contract:\n"
+            + "\n".join(missing)
+        )
+    return candidates
 
 
 def print_metrics(
@@ -320,6 +414,7 @@ def print_metrics(
 
 def main() -> None:
     args = parse_arguments()
+    requested_raster_dates = resolve_raster_dates(args)
     configure_period_environment(
         args.start_date,
         args.end_date_exclusive,
@@ -584,11 +679,94 @@ def main() -> None:
             run_directory,
         )
 
+    # Final field comparison is part of the same scientific run.
+    field_paths: dict[str, Path] = {}
+    if not args.no_field_evaluation:
+        print()
+        print("=== FINAL FIELD COMPARISON ===")
+        field_arguments = [
+            "--project",
+            project_id,
+        ]
+        if args.refresh_raw:
+            field_arguments.append(
+                "--restart"
+            )
+        run_script(
+            project_root,
+            "run_field_evaluation.py",
+            field_arguments,
+        )
+        field_paths = collect_field_output_paths(workspace)
+    else:
+        print()
+        print(
+            "Field comparison: SKIPPED"
+        )
+
+    raster_products: dict[str, dict[str, object]] = {}
+    if requested_raster_dates:
+        print()
+        print("=== 20 M ET PRODUCTION ===")
+        print(
+            "Requested MODIS periods:",
+            ", ".join(requested_raster_dates),
+        )
+        print(
+            "Initializing Earth Engine once for multi-period production..."
+        )
+        ee.Initialize(
+            project=project_id
+        )
+        ee.Number(1).getInfo()
+
+        for raster_date in requested_raster_dates:
+            print()
+            print("-" * 72)
+            print("Producing MODIS period:", raster_date)
+            print("-" * 72)
+            raster_products[raster_date] = download_ridge25_basin(
+                project_root=project_root,
+                period_start=raster_date,
+                model=result.model,
+                aoa_parameters=aoa_parameters,
+                tile_size_m=args.tile_size_m,
+                min_tile_size_m=(
+                    args.min_tile_size_m
+                ),
+            )
+    else:
+        print()
+        print(
+            "Raster generation: SKIPPED"
+        )
+
     output_paths = {
         **{f"table:{key}": value for key, value in table_paths.items()},
         **{f"aoa:{key}": value for key, value in aoa_paths.items()},
         **{f"figure:{key}": value for key, value in figure_paths.items()},
+        **{f"field:{key}": value for key, value in field_paths.items()},
     }
+    production_output_metadata: dict[str, dict[str, str]] = {}
+    for period, product in raster_products.items():
+        production_output_metadata[period] = {
+            "raster": str(product["raster"]),
+            "tile_manifest": str(product["manifest"]),
+            "production_metadata": str(product["metadata"]),
+        }
+        output_paths[f"raster:{period}:scientific"] = Path(product["raster"])
+        output_paths[f"raster:{period}:manifest"] = Path(product["manifest"])
+        output_paths[f"raster:{period}:metadata"] = Path(product["metadata"])
+
+    run_metadata["field_evaluation"] = {
+        "executed": not args.no_field_evaluation,
+        "primary_valid_day_rule": "at_least_5_of_8_days",
+        "complete_case_sensitivity": "8_of_8_days",
+        "scenario_counts_expected_from_frozen_workflow": [21, 17, 11, 9],
+        "outputs": {name: str(path) for name, path in field_paths.items()},
+    }
+    run_metadata["raster_periods"] = list(requested_raster_dates)
+    run_metadata["production_outputs"] = production_output_metadata
     run_metadata["provenance"] = build_run_provenance(
         project_root=project_root,
         canonical_inputs=inputs,
@@ -624,62 +802,13 @@ def main() -> None:
         "Core figures:",
         len(figure_paths),
     )
-
-    if not args.no_field_evaluation:
-        print()
-        print("=== FINAL FIELD COMPARISON ===")
-        field_arguments = [
-            "--project",
-            project_id,
-        ]
-        if args.refresh_raw:
-            field_arguments.append(
-                "--restart"
-            )
-        run_script(
-            project_root,
-            "run_field_evaluation.py",
-            field_arguments,
-        )
-    else:
-        print()
-        print(
-            "Field comparison: SKIPPED"
-        )
-
-    raster_date = resolve_raster_date(
-        args
-    )
-    if raster_date is None:
-        print()
-        print(
-            "Raster generation: SKIPPED"
-        )
-        return
-
-    print()
-    print("=== 20 M ET PRODUCTION ===")
     print(
-        "Requested MODIS period:",
-        raster_date,
+        "Field outputs hashed:",
+        len(field_paths),
     )
     print(
-        "Initializing Earth Engine for tiled production..."
-    )
-    ee.Initialize(
-        project=project_id
-    )
-    ee.Number(1).getInfo()
-
-    product = download_ridge25_basin(
-        project_root=project_root,
-        period_start=raster_date,
-        model=result.model,
-        aoa_parameters=aoa_parameters,
-        tile_size_m=args.tile_size_m,
-        min_tile_size_m=(
-            args.min_tile_size_m
-        ),
+        "Raster periods:",
+        len(raster_products),
     )
 
     print()
@@ -690,18 +819,12 @@ def main() -> None:
         "Model source:",
         "fitted in current run",
     )
-    print(
-        "Raster:",
-        product["raster"],
-    )
-    print(
-        "Tile manifest:",
-        product["manifest"],
-    )
-    print(
-        "Production metadata:",
-        product["metadata"],
-    )
+    for period, product in raster_products.items():
+        print()
+        print("Period:", period)
+        print("  Raster:", product["raster"])
+        print("  Tile manifest:", product["manifest"])
+        print("  Production metadata:", product["metadata"])
     print(
         "Google Drive used:",
         "NO",

@@ -1,8 +1,10 @@
-"""Shared specification for the final Sentinel-2 Kc model.
+"""Legacy Random-Forest specification retained for historical reproducibility.
 
-This module is the single source of truth for predictor order, temporal
-harmonics, and Random Forest hyperparameters. Training and spatial production
-must import the same definitions from here.
+This module is **not** the source of truth for the accepted Ridge-25 model or
+for current production. The frozen Ridge-25 specification lives in
+``et_downscaling.ridge25`` / ``et_downscaling.modeling`` and current production
+uses the Ridge-25 modules. Keep this file only so historical analyses remain
+traceable.
 """
 
 from __future__ import annotations

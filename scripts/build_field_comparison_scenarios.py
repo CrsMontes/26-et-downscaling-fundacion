@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 
 from et_downscaling.config import ANALYSIS_CRS
+from et_downscaling.field_reporting import build_temporal_completeness_sensitivity
 from et_downscaling.ridge25_production import build_ridge25_production_stack
 
 
@@ -389,6 +390,11 @@ def main() -> None:
 
     scenario_table = pd.DataFrame(scenario_rows)
     metrics_table = pd.DataFrame(metric_rows)
+    temporal_sensitivity_table = build_temporal_completeness_sensitivity(
+        final_table=final_table,
+        scenarios=scenarios,
+        calculate_metrics=module.calculate_metrics,
+    )
 
     out_dir = (
         workspace.diagnostics / "field_ridge25_final_scenarios"
@@ -398,10 +404,17 @@ def main() -> None:
     comparison_path = out_dir / "field_comparison_scenarios.csv"
     scenario_path = out_dir / "field_scenario_definitions.csv"
     metrics_path = out_dir / "field_scenario_metrics.csv"
+    temporal_sensitivity_path = (
+        out_dir / "field_temporal_completeness_sensitivity.csv"
+    )
 
     final_table.to_csv(comparison_path, index=False)
     scenario_table.to_csv(scenario_path, index=False)
     metrics_table.to_csv(metrics_path, index=False)
+    temporal_sensitivity_table.to_csv(
+        temporal_sensitivity_path,
+        index=False,
+    )
 
     print()
     print("=" * 120)
@@ -419,10 +432,21 @@ def main() -> None:
         )
     )
     print()
+    print("=" * 120)
+    print("FIELD TEMPORAL COMPLETENESS SENSITIVITY")
+    print("=" * 120)
+    print(
+        temporal_sensitivity_table.to_string(
+            index=False,
+            float_format=lambda value: f"{value:.4f}",
+        )
+    )
+    print()
     print("Saved:")
     print(" -", comparison_path)
     print(" -", scenario_path)
     print(" -", metrics_path)
+    print(" -", temporal_sensitivity_path)
 
 
 if __name__ == "__main__":
