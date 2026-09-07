@@ -9,7 +9,9 @@ Scientific execution
 4. Perform spatial-block and leave-one-year-out OOF validation.
 5. Fit Ridge-25 in memory on all eligible observations and rebuild the AOA.
 6. Save current-run tables, AOA parameters, metadata and core diagnostics.
-7. Optionally generate one locally downloaded 20 m ET raster followed by the
+7. Run the final field-comparison phase using spatial-OOF fine ET; field
+   observations never enter Ridge-25 training.
+8. Optionally generate one locally downloaded 20 m ET raster followed by the
    single global exact-overlap MODIS reconciliation.
 
 A fitted model is never loaded from disk. Reconciliation is never used during
@@ -93,6 +95,14 @@ def parse_arguments():
     parser.add_argument(
         "--no-figures",
         action="store_true",
+    )
+    parser.add_argument(
+        "--no-field-evaluation",
+        action="store_true",
+        help=(
+            "Skip the final ETgage field-comparison phase. "
+            "Field observations never train Ridge-25."
+        ),
     )
     return parser.parse_args()
 
@@ -595,6 +605,28 @@ def main() -> None:
         "Core figures:",
         len(figure_paths),
     )
+
+    if not args.no_field_evaluation:
+        print()
+        print("=== FINAL FIELD COMPARISON ===")
+        field_arguments = [
+            "--project",
+            project_id,
+        ]
+        if args.refresh_raw:
+            field_arguments.append(
+                "--restart"
+            )
+        run_script(
+            project_root,
+            "run_field_evaluation.py",
+            field_arguments,
+        )
+    else:
+        print()
+        print(
+            "Field comparison: SKIPPED"
+        )
 
     raster_date = resolve_raster_date(
         args
