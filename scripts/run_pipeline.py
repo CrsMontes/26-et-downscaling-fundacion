@@ -753,10 +753,14 @@ def main() -> None:
             "raster": str(product["raster"]),
             "tile_manifest": str(product["manifest"]),
             "production_metadata": str(product["metadata"]),
+            "modis_raster": str(product["modis_raster"]),
+            "modis_metadata": str(product["modis_metadata"]),
         }
         output_paths[f"raster:{period}:scientific"] = Path(product["raster"])
         output_paths[f"raster:{period}:manifest"] = Path(product["manifest"])
         output_paths[f"raster:{period}:metadata"] = Path(product["metadata"])
+        output_paths[f"raster:{period}:modis_native"] = Path(product["modis_raster"])
+        output_paths[f"raster:{period}:modis_metadata"] = Path(product["modis_metadata"])
 
     run_metadata["field_evaluation"] = {
         "executed": not args.no_field_evaluation,
@@ -825,6 +829,8 @@ def main() -> None:
         print("  Raster:", product["raster"])
         print("  Tile manifest:", product["manifest"])
         print("  Production metadata:", product["metadata"])
+        print("  Native MODIS ET:", product["modis_raster"])
+        print("  Native MODIS metadata:", product["modis_metadata"])
     print(
         "Google Drive used:",
         "NO",

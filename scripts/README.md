@@ -16,6 +16,7 @@ The production pipeline orchestrates:
 - Ridge-25 fitting and blocked validation
 - Ridge-25 AOA reconstruction
 - exact-overlap 20 m ET production when a raster date is requested
+- native-grid MODIS ET basin output for the same requested period
 
 The accepted operational model does not require HLS, Sentinel-1, CHIRPS, FVC
 or albedo. Those sources/variables remain only in reproducibility diagnostics.
@@ -48,7 +49,9 @@ After a three-period production run has passed QA:
     python scripts/build_final_outputs.py
 
 This is a packaging/visualization step only. It derives exact one-band ET copies
-from scientific raster band 1 and writes only the three ET GeoTIFFs,
-`raster_summary.csv`, and the read-only visualization notebook under the
-external `ET_fundacion_workspace/final/` directory. It does not recalculate ET
-or duplicate the scientific multiband products.
+from scientific raster band 1, copies the three native-grid MODIS comparison
+rasters into `final/modis/`, and writes `raster_summary.csv` plus the read-only
+visualization notebook under the external `ET_fundacion_workspace/final/`
+directory. It does not recalculate ET, resample MODIS, or duplicate the scientific
+multiband products. For a previously frozen run that predates this output, use
+`scripts/export_modis_coarse_rasters.py` once to backfill the three coarse rasters.

@@ -15,8 +15,8 @@ from et_downscaling.workspace import get_workspace_paths
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description=(
-            "Derive the three one-band ET rasters, raster summary, and local "
-            "visualization notebook from a completed production run."
+            "Derive the three one-band ET rasters, copy the three native MODIS "
+            "comparison rasters, and build the minimal local final view."
         )
     )
     parser.add_argument(
@@ -58,6 +58,8 @@ def main():
     print("Source run:", outputs["source_run"])
     for period in FINAL_PERIODS:
         print(f"ET {period}:", outputs[f"et_{period}"])
+    for period in FINAL_PERIODS:
+        print(f"MODIS {period}:", outputs[f"modis_{period}"])
     print("Raster summary:", outputs["raster_summary"])
     print("Visualization notebook:", outputs["notebook"])
     print("Scientific multiband rasters remain in current/rasters and are not copied.")

@@ -144,6 +144,8 @@ def test_final_pipeline_hashes_field_and_final_raster_outputs():
     assert 'f"raster:{period}:scientific"' in source
     assert 'f"raster:{period}:manifest"' in source
     assert 'f"raster:{period}:metadata"' in source
+    assert 'f"raster:{period}:modis_native"' in source
+    assert 'f"raster:{period}:modis_metadata"' in source
 
 
 def test_legacy_random_forest_model_spec_is_not_labeled_final_source_of_truth():

@@ -79,11 +79,16 @@ only `ET_fundacion_workspace/final/` with:
 - `ET_2020-03-13_20m.tif`;
 - `ET_2021-11-25_20m.tif`;
 - `ET_2022-03-30_20m.tif`;
+- `modis/MODIS_ET_2020-03-13_native.tif`;
+- `modis/MODIS_ET_2021-11-25_native.tif`;
+- `modis/MODIS_ET_2022-03-30_native.tif`;
 - `raster_summary.csv`;
 - `final_results_visualization.ipynb`.
 
 The three ET-only GeoTIFFs are exact band-1 copies of the frozen scientific
-multiband products; no ET is recalculated. `raster_summary.csv` records basic
+multiband products; no ET is recalculated. The MODIS comparison GeoTIFFs retain
+the native sinusoidal grid and original period ET values for native cells that
+intersect the basin; they are not resampled to 20 m. `raster_summary.csv` records basic
 published-support and common-three-date-support statistics. The notebook is a
 read-only local visualizer and does not train, query Earth Engine, reconcile,
 modify products, or export manuscript-specific figures or tables. Additional

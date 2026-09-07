@@ -128,6 +128,64 @@ def derive_et_only_raster(source: Path, destination: Path) -> Path:
     return destination
 
 
+def validate_native_modis_raster(path: Path) -> None:
+    """Validate the one-band native-grid MODIS ET convenience product."""
+    path = Path(path)
+    with rasterio.open(path) as src:
+        if src.count != 1:
+            raise ValueError(f"Expected one-band native MODIS raster: {path}")
+        if src.descriptions[0] != "ET_MODIS_mm_period":
+            raise ValueError(f"Unexpected native MODIS band description: {path}")
+        if src.crs is None:
+            raise ValueError(f"Native MODIS raster has no CRS: {path}")
+        if not np.isfinite(abs(src.res[0])) or not np.isfinite(abs(src.res[1])):
+            raise ValueError(f"Native MODIS raster has invalid pixel size: {path}")
+
+
+def copy_native_modis_raster(source: Path, destination: Path) -> Path:
+    """Copy a native-grid MODIS ET raster exactly without resampling."""
+    source = Path(source)
+    destination = Path(destination)
+    validate_native_modis_raster(source)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    with rasterio.open(source) as src, rasterio.open(destination) as dst:
+        if src.crs != dst.crs or src.transform != dst.transform:
+            raise RuntimeError("Native MODIS georeferencing changed during copy.")
+        if src.width != dst.width or src.height != dst.height:
+            raise RuntimeError("Native MODIS dimensions changed during copy.")
+        if src.nodata != dst.nodata:
+            raise RuntimeError("Native MODIS NoData changed during copy.")
+        if not np.array_equal(src.read(1), dst.read(1), equal_nan=True):
+            raise RuntimeError("Native MODIS values changed during copy.")
+    return destination
+
+
+def resolve_native_modis_source(
+    workspace_current: Path,
+    production_outputs: dict[str, dict],
+    period: str,
+) -> Path:
+    """Resolve a native MODIS product from run metadata or local backfill."""
+    recorded = str(production_outputs.get(period, {}).get("modis_raster", "")).strip()
+    if recorded:
+        path = Path(recorded)
+        if path.is_file():
+            return path
+    fallback = (
+        Path(workspace_current)
+        / "rasters_modis"
+        / period
+        / f"MODIS_ET_{period}_native.tif"
+    )
+    if fallback.is_file():
+        return fallback
+    raise FileNotFoundError(
+        f"Native MODIS ET raster not found for {period}. "
+        "Run scripts/export_modis_coarse_rasters.py to backfill it."
+    )
+
+
 def _valid_mask(src: rasterio.io.DatasetReader) -> np.ndarray:
     return ~np.ma.getmaskarray(src.read(1, masked=True))
 
@@ -275,6 +333,7 @@ def build_minimal_final_outputs(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     et_rasters: dict[str, Path] = {}
+    modis_rasters: dict[str, Path] = {}
     for period in periods:
         source = Path(production_outputs[period]["raster"])
         if not source.is_file():
@@ -282,6 +341,15 @@ def build_minimal_final_outputs(
         destination = output_dir / f"ET_{period}_20m.tif"
         derive_et_only_raster(source, destination)
         et_rasters[period] = destination
+
+        modis_source = resolve_native_modis_source(
+            workspace_current=workspace_current,
+            production_outputs=production_outputs,
+            period=period,
+        )
+        modis_destination = output_dir / "modis" / f"MODIS_ET_{period}_native.tif"
+        copy_native_modis_raster(modis_source, modis_destination)
+        modis_rasters[period] = modis_destination
 
     summary = build_raster_summary(
         et_rasters=et_rasters,
@@ -302,6 +370,7 @@ def build_minimal_final_outputs(
 
     return {
         **{f"et_{period}": path for period, path in et_rasters.items()},
+        **{f"modis_{period}": path for period, path in modis_rasters.items()},
         "raster_summary": summary_path,
         "notebook": notebook_destination,
         "source_run": run_dir,

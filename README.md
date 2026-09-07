@@ -102,9 +102,10 @@ After a complete run passes QA, create the minimal local final view with:
 
     python scripts/build_final_outputs.py
 
-This creates only three one-band ET GeoTIFFs, `raster_summary.csv`, and a
-read-only visualization notebook under `ET_fundacion_workspace/final/`. The
-scientific multiband rasters, diagnostics, tables, metadata and SHA-256
+This creates the three one-band 20 m ET GeoTIFFs, three native-grid MODIS ET
+comparison GeoTIFFs under `final/modis/`, `raster_summary.csv`, and a read-only
+visualization notebook under `ET_fundacion_workspace/final/`. The scientific
+multiband rasters, diagnostics, tables, metadata and SHA-256
 provenance remain in `ET_fundacion_workspace/current/` and are not duplicated.
 Generated products are not versioned in Git.
 

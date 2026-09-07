@@ -17,9 +17,11 @@ from pathlib import Path
 import ee
 import numpy as np
 import rasterio
+from rasterio.features import bounds as geometry_bounds
 from rasterio.features import rasterize
 from rasterio.transform import Affine, from_origin
 from rasterio.windows import Window
+from rasterio.warp import transform_geom
 
 from .config import ANALYSIS_CRS
 from .local_reconciliation import (
@@ -518,6 +520,126 @@ def _download_native_modis(
     return bands[0].filled(np.nan).astype(np.float64), grid
 
 
+def _write_native_modis_basin_raster(
+    project_root: Path,
+    period_start: str,
+    modis_et: np.ndarray,
+    modis_grid,
+    output_directory: Path,
+) -> dict[str, object]:
+    """Write native-grid MODIS ET cells intersecting the basin.
+
+    Values remain on the native MODIS sinusoidal grid. The basin is used only
+    as a spatial mask; no spatial resampling is performed. Boundary cells are
+    retained when their native footprint intersects the basin.
+    """
+    basin_geometry = _analysis_geometry(project_root)
+    basin_native = transform_geom(
+        ANALYSIS_CRS,
+        modis_grid.local_crs,
+        basin_geometry,
+        precision=15,
+    )
+    basin_mask = rasterize(
+        [(basin_native, 1)],
+        out_shape=modis_et.shape,
+        transform=modis_grid.transform,
+        fill=0,
+        all_touched=True,
+        dtype="uint8",
+    ).astype(bool)
+    if not np.any(basin_mask):
+        raise RuntimeError("Basin does not intersect the downloaded native MODIS grid.")
+
+    rows, columns = np.where(basin_mask)
+    row0 = int(rows.min())
+    row1 = int(rows.max()) + 1
+    col0 = int(columns.min())
+    col1 = int(columns.max()) + 1
+    window = Window(col0, row0, col1 - col0, row1 - row0)
+    cropped_transform = rasterio.windows.transform(window, modis_grid.transform)
+
+    cropped_et = np.asarray(modis_et[row0:row1, col0:col1], dtype=np.float64)
+    cropped_mask = basin_mask[row0:row1, col0:col1]
+    output = np.where(cropped_mask, cropped_et, np.nan)
+
+    output_directory = Path(output_directory)
+    output_directory.mkdir(parents=True, exist_ok=True)
+    raster_path = output_directory / f"MODIS_ET_{period_start}_native.tif"
+    metadata_path = output_directory / f"production_metadata_MODIS_ET_{period_start}_native.json"
+
+    profile = {
+        "driver": "GTiff",
+        "width": output.shape[1],
+        "height": output.shape[0],
+        "count": 1,
+        "dtype": "float32",
+        "crs": modis_grid.local_crs,
+        "transform": cropped_transform,
+        "nodata": OUTPUT_NODATA,
+        "compress": "deflate",
+        "tiled": True,
+        "BIGTIFF": "IF_SAFER",
+    }
+    prepared = np.where(np.isfinite(output), output, OUTPUT_NODATA).astype(np.float32)
+    with rasterio.open(raster_path, "w", **profile) as destination:
+        destination.write(prepared, 1)
+        destination.set_band_description(1, "ET_MODIS_mm_period")
+        destination.update_tags(
+            period_start=period_start,
+            source_product="MOD16A2GF v6.1",
+            nominal_resolution_m="500",
+            grid_role="native_modis_coarse_product",
+            basin_mask_rule="native_cells_intersecting_basin_all_touched",
+            resampling="none",
+        )
+
+    valid_values = output[np.isfinite(output)]
+    metadata = {
+        "period_start": period_start,
+        "source_product": "MOD16A2GF v6.1",
+        "band": "ET_MODIS_mm_period",
+        "units": "mm_per_modis_period",
+        "nominal_resolution_m": 500,
+        "native_grid_preserved": True,
+        "native_pixel_size_x_m": float(abs(cropped_transform.a)),
+        "native_pixel_size_y_m": float(abs(cropped_transform.e)),
+        "basin_mask_rule": "retain native MODIS cells intersecting basin (all_touched=True)",
+        "spatial_resampling": "none",
+        "valid_basin_cells": int(valid_values.size),
+        "raster": str(raster_path),
+    }
+    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    return {
+        "raster": raster_path,
+        "metadata": metadata_path,
+        "metadata_values": metadata,
+    }
+
+
+def download_native_modis_basin(
+    project_root: Path,
+    period_start: str,
+    timeout_seconds: int = 600,
+) -> dict[str, object]:
+    """Download only the native-grid MODIS ET basin product for one period."""
+    project_root = Path(project_root).resolve()
+    workspace = get_workspace_paths(project_root).ensure()
+    basin_geometry = _analysis_geometry(project_root)
+    modis_et, modis_grid = _download_native_modis(
+        period_start=period_start,
+        support_bounds=tuple(float(value) for value in geometry_bounds(basin_geometry)),
+        timeout_seconds=timeout_seconds,
+    )
+    return _write_native_modis_basin_raster(
+        project_root=project_root,
+        period_start=period_start,
+        modis_et=modis_et,
+        modis_grid=modis_grid,
+        output_directory=workspace.root / "rasters_modis" / period_start,
+    )
+
+
 def _fine_diagnostics(edges, result, fine_size: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     coarse = np.asarray(edges.coarse_index, dtype=np.int64)
     fine = np.asarray(edges.fine_index, dtype=np.int64)
@@ -637,6 +759,14 @@ def _reconcile_raw_mosaic(
         support_bounds=support_bounds,
         timeout_seconds=timeout_seconds,
     )
+    workspace = get_workspace_paths(project_root).ensure()
+    modis_product = _write_native_modis_basin_raster(
+        project_root=project_root,
+        period_start=period_start,
+        modis_et=modis_et,
+        modis_grid=modis_grid,
+        output_directory=workspace.root / "rasters_modis" / period_start,
+    )
     print("Building global exact-overlap operator...")
     edges = build_overlap_edges(
         domain=domain,
@@ -744,6 +874,8 @@ def _reconcile_raw_mosaic(
         "mae_adjustment_mm": float(np.mean(np.abs(adjustment))),
         "rmse_adjustment_mm": float(np.sqrt(np.mean(adjustment ** 2))),
         "pearson_final_vs_initial": correlation,
+        "modis_raster": str(modis_product["raster"]),
+        "modis_metadata": str(modis_product["metadata"]),
     }
 
 
@@ -848,6 +980,8 @@ def download_ridge25_basin(
         "raster": raster_path,
         "manifest": manifest_path,
         "metadata": metadata_path,
+        "modis_raster": Path(reconciliation["modis_raster"]),
+        "modis_metadata": Path(reconciliation["modis_metadata"]),
         "completed_tiles": completed,
         "support_tiles": support_tiles,
         "raw_support_mosaic": raw_mosaic_path,
