@@ -1,57 +1,61 @@
-# Operational scripts
+# Virtual Station operational scripts
 
-This directory contains only the current user-facing workflow.
-
-## Production
+The `main` branch is the Virtual Station V5 workflow.
 
 Normal entry point:
 
-    python scripts/run_pipeline.py --project <earth-engine-project>
+```powershell
+python scripts/run_pipeline.py <command>
+```
 
-The production pipeline orchestrates:
+Running `run_pipeline.py` without a command only prints help. No selection,
+training, Earth Engine query, download, or raster production is started
+implicitly.
 
-- `export_meteorology_data.py --ridge25-only` (ERA5-Land + station support)
-- `export_satellite_data.py --optical-source S2 --ridge25-only` (MODIS + S2; no S1 query)
-- `build_training_dataset.py --optical-source S2 --ridge25-only` (no CHIRPS requirement)
-- Ridge-25 fitting and blocked validation
-- Ridge-25 AOA reconstruction
-- exact-overlap 20 m ET production when a raster date is requested
-- native-grid MODIS ET basin output for the same requested period
+## Local validation and derived-result commands
 
-The accepted operational model does not require HLS, Sentinel-1, CHIRPS, FVC
-or albedo. Those sources/variables remain only in reproducibility diagnostics.
+```powershell
+python scripts/run_pipeline.py validate
+python scripts/run_pipeline.py audit
+python scripts/run_pipeline.py summarize
+python scripts/run_pipeline.py compare-coverage `
+    --reference-workspace ..\ET_fundacion_workspace_field_station
+```
 
-## Field evaluation
+`validate` and `audit` are read-only by default. `summarize` and `compare-coverage` do not retrain models or download data, but they may rewrite derived summary/comparison tables in the Virtual Station evaluation workspace.
 
-The current complete field-comparison entry point is:
+## Explicit reproduction commands
 
-    python scripts/run_field_evaluation.py --project <earth-engine-project>
+These commands may query Earth Engine or rewrite generated outputs and therefore
+must be requested explicitly:
 
-It orchestrates the in-basin spatial-OOF exact-overlap evaluation, external
-ST04 handling, the AOA-only sensitivity, and the final scenario tables.
+```powershell
+python scripts/run_pipeline.py reproduce-selection `
+    --project ee-sneiderquintero
 
-Field observations are used only for the separate comparison phase and do not
-constitute independent validation of the full 20 m raster domain.
+python scripts/run_pipeline.py reproduce-training `
+    --project ee-sneiderquintero
 
-## Historical and experimental scripts
+python scripts/run_pipeline.py evaluate-field `
+    --project ee-sneiderquintero `
+    --reference-workspace ..\ET_fundacion_workspace_field_station
 
-Scripts used to reach methodological decisions are not mixed with operational
-commands. They are retained under:
+python scripts/run_pipeline.py produce `
+    --project ee-sneiderquintero `
+    --date 2020-03-13
+```
 
-    reproducibility/scripts/
+The frozen V5 selection uses seed 42, 10 supports in 10 fixed UTM 10 km blocks,
+and the pre-specified GE90 availability rule. Reproduction must not change those
+scientific decisions.
 
-See `reproducibility/script_manifest.md` and `docs/decisions/README.md`.
+`compare_v5_basin_coverage.py` is intentionally read-only: it compares existing
+V5 and Stable5 rasters and never regenerates them.
 
-## Minimal local final outputs
+`produce_virtual_rasters.py` reconstructs Ridge25 and the equal-weight AOA from
+the frozen V5 training population and generates only missing explicitly
+requested dates. Existing scientific rasters are never overwritten.
 
-After a three-period production run has passed QA:
-
-    python scripts/build_final_outputs.py
-
-This is a packaging/visualization step only. It derives exact one-band ET copies
-from scientific raster band 1, copies the three native-grid MODIS comparison
-rasters into `final/modis/`, and writes `raster_summary.csv` plus the read-only
-visualization notebook under the external `ET_fundacion_workspace/final/`
-directory. It does not recalculate ET, resample MODIS, or duplicate the scientific
-multiband products. For a previously frozen run that predates this output, use
-`scripts/export_modis_coarse_rasters.py` once to backfill the three coarse rasters.
+Stable5 is external to this repository. Any Stable5 comparison must receive an
+explicit `--reference-workspace` pointing to
+`ET_fundacion_workspace_field_station`.
