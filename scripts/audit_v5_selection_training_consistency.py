@@ -1,7 +1,8 @@
 """Audit consistency between frozen V5 GE90 selection and extracted training rows.
 
-This is a local-only QA script. It does not call Earth Engine and does not
-modify any file.
+This is a local-only QA script. It does not call Earth Engine. It is
+read-only by default and writes QA tables only when --write-report is
+explicitly supplied.
 
 It verifies, support by support:
 1. selected MODIS pixel ID;
@@ -237,7 +238,12 @@ def main() -> None:
         output_rows
     )
     disagreements = pd.DataFrame(
-        period_disagreement_rows
+        period_disagreement_rows,
+        columns=[
+            "virtual_id",
+            "period_start",
+            "status",
+        ],
     )
 
     output_root = (

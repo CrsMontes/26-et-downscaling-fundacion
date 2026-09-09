@@ -36,7 +36,7 @@ EXPERIMENT_NAME = "v5_basin_random_ge90_canonical"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run the isolated Ridge25 whole-basin random-GE90 experiment."
+        description="Reproduce the frozen operational Virtual Station V5 training design."
     )
     parser.add_argument(
         "--project",
@@ -1844,7 +1844,7 @@ def main() -> None:
 
     experiment_metadata = {
         "experiment": EXPERIMENT_NAME,
-        "status": "experimental_only",
+        "status": "operational_virtual_station",
         "stable_run": stable_run_dir.name,
         "reference_workspace": str(reference_root),
         "analysis_start": args.start_date,
