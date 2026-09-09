@@ -6,12 +6,13 @@
 - `scripts/export_satellite_data.py`
 - `scripts/build_training_dataset.py`
 
-## Current field evaluation
-- `scripts/run_field_evaluation.py`
+## Current Virtual Station field-proxy evaluation
+- `scripts/evaluate_v5_field_proxy.py`
 - `scripts/evaluate_field_ridge25.py`
-- `scripts/evaluate_field_external_st04.py`
 - `scripts/compare_field_with_without_aoa.py`
-- `scripts/build_field_comparison_scenarios.py`
+
+The removed Field-only orchestration and exploratory station scripts remain
+preserved in the `field-station-stable` branch.
 
 ## Full-study reconstruction dependencies
 

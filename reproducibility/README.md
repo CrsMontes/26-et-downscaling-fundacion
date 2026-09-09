@@ -8,9 +8,13 @@ The default operational workflow is not here. It is:
 
     python scripts/run_pipeline.py --project <earth-engine-project>
 
-The current complete field comparison is:
+The current Virtual Station field-derived ET proxy comparison is:
 
-    python scripts/run_field_evaluation.py --project <earth-engine-project>
+    python scripts/run_pipeline.py evaluate-field --workspace-root <virtual-workspace> --project <earth-engine-project> --reference-workspace <field-reference-workspace>
+
+This comparison uses the frozen Field Station workspace only as an explicit
+reference. The legacy Field-only orchestration workflow is maintained in the
+`field-station-stable` branch, not in Virtual Station `main`.
 
 ## Layout
 
