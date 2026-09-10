@@ -10,6 +10,7 @@ from datetime import date
 
 import ee
 
+from .candidate_context import candidate_expected_rows
 from .predictor_availability import (
     _base_properties,
     _period_context,
@@ -223,7 +224,7 @@ EXPORT_SELECTORS = BASE_SELECTORS + tuple(
 
 
 def expected_rows():
-    return 5 * 230
+    return candidate_expected_rows()
 
 
 def experiment_configuration():

@@ -1,10 +1,10 @@
-"""Materialize the complete implemented 2020-2024 candidate-predictor archive.
+"""Materialize every implemented 2020-2024 predictor family on Virtual10.
 
-This archive is deliberately separate from RF-25 training. It reconstructs all
-candidate families for which this repository already contains audited export
-code (S2, HLS, S1 R077/R142, ERA5-Land, CHIRPS, Landsat LST, albedo/FVC and
-seasonality) on the canonical five field-station MODIS footprints. The final
-Virtual10 RF fit remains frozen to its 25 predictors.
+The ten selected virtual MODIS supports are the only sampling supports used by
+this archive.  All implemented candidate families are preserved for audit and
+future work, while the final RF model remains frozen to the accepted 25
+predictors.  Real field stations are not used for model training or candidate
+materialization.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from pathlib import Path
 START_DATE = "2020-01-01"
 END_DATE_EXCLUSIVE = "2025-01-01"
 PERIOD_LABEL = "2020_2024"
+VIRTUAL_SUPPORT_COUNT = 10
 
 
 def root() -> Path:
@@ -37,18 +38,41 @@ def run(relative_script: str, *arguments: str) -> None:
     subprocess.run(command, cwd=root(), check=True, env=os.environ.copy())
 
 
-def main() -> None:
-    args = parse_args()
+def configure_virtual_supports() -> Path:
+    points = root() / "outputs" / "training" / "selection" / "virtual_points.geojson"
+    if not points.is_file():
+        raise FileNotFoundError(
+            f"Virtual10 points not found: {points}\n"
+            "Run `python scripts/run_pipeline.py select --project <PROJECT>` first."
+        )
+    os.environ["ET_STATIONS_GEOJSON"] = str(points.resolve())
+    os.environ["ET_CANDIDATE_SUPPORT_COUNT"] = str(VIRTUAL_SUPPORT_COUNT)
     os.environ["ET_START_DATE"] = START_DATE
     os.environ["ET_END_DATE_EXCLUSIVE"] = END_DATE_EXCLUSIVE
+    return points
 
-    # Reusable five-station raw source tables, rebuilt from Earth Engine.
-    run("scripts/export_meteorology_data.py", "--project", args.project, "--force")
+
+def main() -> None:
+    args = parse_args()
+    points = configure_virtual_supports()
+
+    print("=" * 92)
+    print("COMPLETE VIRTUAL10 CANDIDATE-PREDICTOR ARCHIVE")
+    print("=" * 92)
+    print("Support source:", points)
+    print("Supports:", VIRTUAL_SUPPORT_COUNT)
+    print("Period:", START_DATE, "to", END_DATE_EXCLUSIVE)
+    print("Real field stations used for candidate extraction: NO")
+    print("Final RF-25 feature selection reopened: NO")
+
+    # Canonical reusable sources on Virtual10.  Operational S2 is exported in
+    # model-only mode because orbit-specific S1 is materialized separately below.
+    run("scripts/export_meteorology_data.py", "--project", args.project)
     run(
         "scripts/export_satellite_data.py",
         "--project", args.project,
         "--optical-source", "S2",
-        "--force",
+        "--model-only",
     )
     run("scripts/build_training_dataset.py", "--optical-source", "S2")
 
@@ -58,7 +82,9 @@ def main() -> None:
         "--period-label", PERIOD_LABEL,
     )
 
-    # Earth Engine candidate-family materialization.
+    # Earth Engine candidate-family materialization on exactly the same ten
+    # virtual supports.  These data remain candidates/diagnostics unless they
+    # belong to the frozen RF-25 feature list.
     run(
         "scripts/candidates/export_availability.py",
         *common, "--project", args.project, "--execute",
@@ -88,14 +114,18 @@ def main() -> None:
         "--project", args.project, "--execute",
     )
 
-    # Local assembly; no additional Earth Engine access.
+    # Local row-preserving assembly; no feature selection or model fitting.
     run("scripts/candidates/build_meteorology_candidates.py")
     run("scripts/candidates/build_optical_candidates.py")
     run("scripts/candidates/build_candidate_feature_store.py")
     run("scripts/candidates/build_candidate_master.py")
 
-    print("\nComplete implemented candidate archive materialized under outputs/current/.")
-    print("It is audit/future-analysis data only; RF-25 feature selection was not reopened.")
+    output = root() / "outputs" / "current" / "master" / "master_predictor_store.parquet"
+    if not output.is_file():
+        raise RuntimeError(f"Candidate master was not created: {output}")
+
+    print("\nComplete implemented Virtual10 candidate archive:", output)
+    print("RF-25 remains frozen to its accepted 25 predictors.")
 
 
 if __name__ == "__main__":

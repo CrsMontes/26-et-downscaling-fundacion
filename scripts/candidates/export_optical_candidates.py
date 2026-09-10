@@ -13,6 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 from et_downscaling.candidate_paths import get_candidate_study_paths
+from et_downscaling.candidate_context import candidate_support_count
 
 
 def project_root():
@@ -117,8 +118,11 @@ def support_features_from_local_csv(ee):
         get_candidate_study_paths(project_root()).workspace_root / "raw" / "meteorology" / "station_support.csv",
         dtype={"station_id": str},
     )
-    if len(table) != 5 or table.station_id.nunique() != 5:
-        raise RuntimeError("Expected exactly five unique station-support rows")
+    expected_supports = candidate_support_count()
+    if len(table) != expected_supports or table.station_id.nunique() != expected_supports:
+        raise RuntimeError(
+            f"Expected exactly {expected_supports} unique candidate-support rows"
+        )
     features = []
     for row in table.to_dict("records"):
         properties = {
@@ -157,7 +161,7 @@ def main(argv=None):
         expected_rows, experiment_configuration, validate_context,
     )
     validate_context(args.start_date, args.end_date_exclusive, args.period_label)
-    print("Phase 3A plan: 5 paired-optical annual downloads; shared ERA5 reused")
+    print(f"Candidate optical plan: {candidate_support_count()} supports; annual downloads; shared ERA5 reused")
     print("training_performed = false")
     if not args.execute:
         print("Dry plan only: Earth Engine was not initialized.")

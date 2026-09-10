@@ -12,9 +12,9 @@ from pathlib import Path
 import pandas as pd
 
 from et_downscaling.workspace import get_workspace_paths
+from et_downscaling.candidate_context import candidate_expected_rows
 
 
-EXPECTED_ROWS = 1150
 KEYS = [
     "station_id",
     "modis_pixel_id",
@@ -52,9 +52,10 @@ def main() -> None:
 
     master = module.build_master_store()
 
-    if len(master) != EXPECTED_ROWS:
+    expected_rows = candidate_expected_rows()
+    if len(master) != expected_rows:
         raise RuntimeError(
-            f"Expected {EXPECTED_ROWS} master rows; found {len(master)}"
+            f"Expected {expected_rows} master rows; found {len(master)}"
         )
 
     missing_keys = sorted(set(KEYS) - set(master.columns))
@@ -64,10 +65,10 @@ def main() -> None:
         )
 
     unique_keys = len(master[KEYS].drop_duplicates())
-    if unique_keys != EXPECTED_ROWS:
+    if unique_keys != expected_rows:
         raise RuntimeError(
             "Canonical master keys are not one-to-one: "
-            f"{unique_keys}/{EXPECTED_ROWS}"
+            f"{unique_keys}/{expected_rows}"
         )
 
     required_candidates = [

@@ -15,13 +15,13 @@ from pathlib import Path
 
 START_DATE = "2020-01-01"
 END_DATE_EXCLUSIVE = "2025-01-01"
-EXPECTED_ROWS = 1150
 
 SOURCE_DIRECTORY = Path(__file__).resolve().parents[2] / "src"
 if str(SOURCE_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(SOURCE_DIRECTORY))
 
 from et_downscaling.candidate_paths import get_candidate_study_paths
+from et_downscaling.candidate_context import candidate_expected_rows
 
 
 def project_root():
@@ -189,8 +189,9 @@ def main(argv=None):
 
     output = root / "landsat_lst_station_period.csv"
     rows = merge_csv(paths, output)
-    if rows != EXPECTED_ROWS:
-        raise RuntimeError(f"Expected {EXPECTED_ROWS} LST rows, found {rows}")
+    expected = candidate_expected_rows()
+    if rows != expected:
+        raise RuntimeError(f"Expected {expected} LST rows, found {rows}")
     manifest = {
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "earth_engine_project": args.project,

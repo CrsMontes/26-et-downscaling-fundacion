@@ -12,6 +12,7 @@ from pathlib import Path
 import pandas as pd
 
 from et_downscaling.candidate_paths import get_candidate_study_paths
+from et_downscaling.candidate_context import candidate_expected_rows
 
 
 EXPECTED_CONTEXT = ("2020-01-01", "2025-01-01", "2020_2024")
@@ -177,8 +178,9 @@ def adaptive_export(builder, start, end, destination, exporter, records):
 
 def validate_local_table(table):
     keys = ["station_id", "period_start"]
-    if len(table) != 1150 or table.duplicated(keys).any():
-        raise RuntimeError("Expected exactly 1,150 unique station-period rows")
+    expected = candidate_expected_rows()
+    if len(table) != expected or table.duplicated(keys).any():
+        raise RuntimeError(f"Expected exactly {expected:,} unique support-period rows")
     for column in ("hls_Albedo_mean", "hls_FVC_mean"):
         table[column] = pd.to_numeric(table[column], errors="coerce")
         table.loc[table[column] <= -9990, column] = pd.NA
@@ -223,8 +225,9 @@ def main(argv=None):
         ))
     output = root / "raw" / "hls_albedo_fvc.csv"
     rows = merge_csv(paths, output)
-    if rows != 1150:
-        raise RuntimeError(f"Expected 1,150 rows, found {rows}")
+    expected = candidate_expected_rows()
+    if rows != expected:
+        raise RuntimeError(f"Expected {expected:,} rows, found {rows}")
     integrity = validate_local_table(pd.read_csv(output, dtype={"station_id": str}))
     commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=project_root(),
                             capture_output=True, text=True, check=True).stdout.strip()

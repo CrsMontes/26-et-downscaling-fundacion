@@ -1,6 +1,6 @@
 """Build the row-preserving 2020-2024 candidate-predictor feature store.
 
-The store preserves all 1,150 station-period rows and missing values. It is an
+The store preserves all Virtual10 support-period rows and missing values. It is an
 archive of implemented predictor families, not a model-selection workflow.
 """
 
@@ -13,10 +13,10 @@ import numpy as np
 import pandas as pd
 
 from et_downscaling.candidate_paths import get_candidate_study_paths
+from et_downscaling.candidate_context import candidate_expected_rows
 
 
 KEYS = ["station_id", "period_start"]
-EXPECTED_ROWS = 1150
 MISSING_SENTINEL_MAX = -9990.0
 COMMON_OPTICAL = [
     "Blue", "Green", "Red", "NIR", "SWIR1", "SWIR2",
@@ -106,8 +106,9 @@ def build_store(root):
     availability_root = paths.availability_root / "raw"
 
     optical = read_unique(optical_path, "paired optical table")
-    if len(optical) != EXPECTED_ROWS:
-        raise RuntimeError(f"Expected {EXPECTED_ROWS} base rows, found {len(optical)}")
+    expected_rows = candidate_expected_rows()
+    if len(optical) != expected_rows:
+        raise RuntimeError(f"Expected {expected_rows} base rows, found {len(optical)}")
     identity = [
         "station", "station_id", "period_start", "period_end",
         "period_end_exclusive", "period_days", "modis_pixel_id", "footprint_area_m2",
@@ -200,7 +201,7 @@ def build_store(root):
     store = store.merge(
         support[support_columns], on="station_id", how="left", validate="many_to_one"
     )
-    if len(store) != EXPECTED_ROWS:
+    if len(store) != expected_rows:
         raise RuntimeError("Station support join changed the base universe")
     store = add_harmonics(store)
 
@@ -216,7 +217,7 @@ def build_store(root):
         + ["footprint_mean_elevation_m"]
     )
     store = normalize_numeric_missing(store, predictor_columns)
-    if store.duplicated(KEYS).any() or len(store[KEYS].drop_duplicates()) != EXPECTED_ROWS:
+    if store.duplicated(KEYS).any() or len(store[KEYS].drop_duplicates()) != expected_rows:
         raise RuntimeError("Final feature store keys are not unique")
     return store, predictor_columns
 

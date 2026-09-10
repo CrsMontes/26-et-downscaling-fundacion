@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from et_downscaling.candidate_paths import get_candidate_study_paths
+from et_downscaling.candidate_context import candidate_expected_rows
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,7 +20,6 @@ PATHS = get_candidate_study_paths(ROOT)
 FEATURE_STORE = PATHS.intermediate_root / "feature_store" / "feature_store.csv"
 LST_TABLE = PATHS.landsat_lst_root / "landsat_lst_station_period.csv"
 KEYS = ["station_id", "modis_pixel_id", "period_start"]
-EXPECTED_MASTER_ROWS = 1150
 
 S2_COMMON = [
     "s2_Blue_mean", "s2_Green_mean", "s2_Red_mean", "s2_NIR_mean",
@@ -65,9 +65,10 @@ def build_master_store():
     lst = normalized_keys(pd.read_csv(
         LST_TABLE, dtype={"station_id": str, "modis_pixel_id": str}
     ), "Landsat LST table")
-    if len(store) != EXPECTED_MASTER_ROWS or len(lst) != EXPECTED_MASTER_ROWS:
+    expected_rows = candidate_expected_rows()
+    if len(store) != expected_rows or len(lst) != expected_rows:
         raise RuntimeError(
-            f"Expected 1,150 rows in both inputs; found {len(store)} and {len(lst)}"
+            f"Expected {expected_rows:,} rows in both inputs; found {len(store)} and {len(lst)}"
         )
     lst_columns = [
         "LST_parent_mean_K", "LST_valid_count_20m", "LST_valid_area_m2",
@@ -86,7 +87,7 @@ def build_master_store():
     }
     lst = lst[KEYS + lst_columns].rename(columns=rename)
     master = store.merge(lst, on=KEYS, how="left", validate="one_to_one")
-    if len(master) != EXPECTED_MASTER_ROWS or master[KEYS].isna().any().any():
+    if len(master) != expected_rows or master[KEYS].isna().any().any():
         raise RuntimeError("The Landsat join changed or invalidated master keys")
 
     production_s2 = normalized_keys(
@@ -97,10 +98,9 @@ def build_master_store():
         "operational Sentinel-2 table",
     )
 
-    if len(production_s2) != EXPECTED_MASTER_ROWS:
+    if len(production_s2) != expected_rows:
         raise RuntimeError(
-            "Expected 1,150 rows in operational Sentinel-2; "
-            f"found {len(production_s2)}"
+            f"Expected {expected_rows:,} rows in operational Sentinel-2; found {len(production_s2)}"
         )
 
     missing_production_s2 = sorted(
@@ -126,7 +126,7 @@ def build_master_store():
         validate="one_to_one",
     )
 
-    if len(master) != EXPECTED_MASTER_ROWS:
+    if len(master) != expected_rows:
         raise RuntimeError(
             "Operational Sentinel-2 join changed the master population"
         )

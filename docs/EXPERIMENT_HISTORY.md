@@ -56,4 +56,4 @@ The RF-weighted AOA threshold is deliberately recomputed from each fresh final t
 
 `main` contains the RF-25 method. The prior stages are preserved as branches: `virtual`, `field` and `diagnostic`. Generated data now live inside `outputs/` in the repository directory but are ignored by Git. A fresh run downloads and rebuilds data locally without Google Drive.
 
-The final workflow does not reopen predictor selection or RF tuning. Any future methodological change must be recorded explicitly rather than folded silently into production.
+The final workflow does not reopen predictor selection or RF tuning. A fresh run first materializes the complete implemented predictor universe on the selected 10 Virtual10 supports, preserves that master, and then derives RF-25 from the frozen GE90 support-period whitelist using only the accepted 25 predictors. The five real stations remain external to training. Any future methodological change must be recorded explicitly rather than folded silently into production.

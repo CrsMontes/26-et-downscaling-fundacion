@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import os
 
 import ee
 import pandas as pd
 
 from .config import STATIONS_GEOJSON_PATH
+
+
+STATIONS_GEOJSON_ENV_VAR = "ET_STATIONS_GEOJSON"
 
 
 REQUIRED_STATION_PROPERTIES = (
@@ -21,6 +25,9 @@ def get_repository_root() -> Path:
 
 
 def get_station_geojson_path() -> Path:
+    override = os.environ.get(STATIONS_GEOJSON_ENV_VAR, "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
     return (
         get_repository_root()
         / STATIONS_GEOJSON_PATH

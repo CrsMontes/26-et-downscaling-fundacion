@@ -61,6 +61,7 @@ def preflight() -> None:
     for name, path in inputs.items():
         print(f"  {name}: {path}")
     print("Output root:", root() / "outputs")
+    print("Candidate archive: all implemented predictor families on Virtual10")
     print("Final model: RF-25, fixed 25 predictors, no tuning")
     print("AOA: RF-weighted DI + spatial-CV threshold; LPD diagnostic")
     print("Google Drive: not used")
@@ -72,15 +73,15 @@ def run_core(project: str, dates: list[str]) -> None:
         ["--project", project, "--seed", "42", "--n-supports", "10", "--min-ge90-per-year", "20", "--max-candidates", "9123"],
     )
     run_script(
-        "build_virtual_training_population.py",
+        "download_all_candidate_predictors.py",
         ["--project", project],
     )
+    run_script("build_rf25_training_population.py", [])
     run_script("train_rf25.py", [])
     production_args = ["--project", project]
     for value in dates:
         production_args += ["--date", value]
     run_script("produce_rf25_rasters.py", production_args)
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -92,11 +93,6 @@ def build_parser() -> argparse.ArgumentParser:
         item = sub.add_parser(name)
         item.add_argument("--project", required=True)
         item.add_argument("--date", dest="dates", action="append", default=None)
-        item.add_argument(
-            "--skip-candidates",
-            action="store_true",
-            help="Skip the comprehensive five-station candidate archive; final RF-25 is unaffected.",
-        )
         if name == "fresh":
             item.add_argument(
                 "--yes",
@@ -144,24 +140,20 @@ def main() -> None:
         clean_outputs()
         dates = args.dates or DEFAULT_DATES
         run_core(args.project, dates)
-        if not args.skip_candidates:
-            run_script("download_all_candidate_predictors.py", ["--project", args.project])
         return
     if args.command == "run":
         preflight()
         dates = args.dates or DEFAULT_DATES
         run_core(args.project, dates)
-        if not args.skip_candidates:
-            run_script("download_all_candidate_predictors.py", ["--project", args.project])
         return
     if args.command == "select":
         run_script("select_virtual_stations.py", ["--project", args.project, "--seed", "42", "--n-supports", "10", "--min-ge90-per-year", "20", "--max-candidates", "9123"])
         return
     if args.command == "extract":
-        cmd = ["--project", args.project]
         if args.force:
-            cmd.append("--force")
-        run_script("build_virtual_training_population.py", cmd)
+            print("Note: --force is implicit for comprehensive candidate re-downloads.")
+        run_script("download_all_candidate_predictors.py", ["--project", args.project])
+        run_script("build_rf25_training_population.py", [])
         return
     if args.command == "train":
         run_script("train_rf25.py", [])

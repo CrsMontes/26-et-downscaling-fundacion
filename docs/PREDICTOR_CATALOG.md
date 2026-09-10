@@ -22,7 +22,7 @@ These retain their coarse meteorological support even though they are distribute
 
 ## Materialized candidate archive
 
-`scripts/download_all_candidate_predictors.py` reconstructs all candidate families already implemented and audited in the repository for the canonical 2020–2024 five-field-station candidate universe. These files are for provenance, diagnostics and possible future controlled experiments; they do not alter RF-25.
+`scripts/download_all_candidate_predictors.py` reconstructs all candidate families already implemented and audited in the repository for the canonical 2020–2024 period on the **same 10 Virtual10 MODIS supports used by the final training design**. These files are preserved for provenance, diagnostics and possible future controlled experiments; they do not alter RF-25.
 
 - Sentinel-2 common optical variables.
 - Sentinel-2 red-edge variables and NDRE.
@@ -34,11 +34,11 @@ These retain their coarse meteorological support even though they are distribute
 - ERA5-Land final variables plus `VPD_max_kPa` and reference-ET derivatives retained in the candidate store.
 - CHIRPS `Precip_period_mm` and `Precip_prev30d_mm`.
 - Landsat L8/L9 surface-temperature candidate `LST_parent_mean_K` plus thermal QA/provenance fields.
-- Static footprint mean elevation from the implemented station-support extraction.
+- Static footprint mean elevation from the implemented support extraction.
 - Seasonal harmonics.
 
-### Important scope distinction
+### Training contract
 
-The comprehensive candidate archive is reconstructed on the canonical five field-station MODIS footprints because that is the support on which the historical candidate experiments were implemented. The **final Virtual10 training extraction is intentionally limited to the frozen 25 RF predictors**. This prevents unused candidate availability from redefining the Virtual10 training population or creating a hidden complete-case filter.
+The complete Virtual10 predictor universe is first preserved in `outputs/current/master/master_predictor_store.parquet` and copied to `outputs/training/master/virtual10_all_predictors_2020_2024.*`. RF-25 is then built from the frozen GE90 support-period whitelist and **only the 25 accepted RF predictors**. Unused candidate missingness is not allowed to remove a training row. Real field stations remain external to training and candidate materialization.
 
 Terrain slope/aspect were discussed historically but are not currently materialized as audited candidate predictors. They are therefore not silently added to the archive or model.

@@ -9,6 +9,8 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+from et_downscaling.candidate_context import candidate_expected_rows, candidate_support_count
+
 from et_downscaling.candidate_paths import get_candidate_study_paths
 
 
@@ -41,8 +43,8 @@ def validate_context(start, end, label):
     return output_root(label)
 
 
-def expected_rows(number_periods=230, number_stations=5):
-    return number_periods * number_stations
+def expected_rows(number_periods=230):
+    return candidate_expected_rows(number_periods)
 
 
 def merge_csv(paths, destination):
@@ -111,7 +113,7 @@ def print_plan():
     print("  end_date_exclusive = 2025-01-01")
     print("  period_label = 2020_2024")
     print("  views = L8_ONLY, L8_L9_COMBINED")
-    print("  expected station-periods per view = 1150")
+    print(f"  expected support-periods per view = {expected_rows()}")
     print("  expected initial Earth Engine requests = 5 annual downloads")
     print("  training_performed = false")
 
@@ -154,7 +156,7 @@ def main(argv=None):
     output = raw / "landsat_lst_station_period.csv"
     rows = merge_csv(paths, output)
     if rows != expected_rows():
-        raise RuntimeError(f"Expected 1150 thermal rows, found {rows}")
+        raise RuntimeError(f"Expected {expected_rows()} thermal rows, found {rows}")
 
     commit = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=project_root(), text=True,

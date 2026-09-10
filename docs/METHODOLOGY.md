@@ -25,7 +25,7 @@ The main estimator is `RandomForestRegressor` with a frozen 25-predictor feature
 - `bootstrap = True`
 - `random_state = 42`
 
-No hyperparameter tuning or feature search occurs in the final training command. Candidate predictors are downloaded to a separate archive but are not silently introduced into RF-25.
+No hyperparameter tuning or feature search occurs in the final training command. Before fitting, all implemented candidate predictor families are materialized on the same 10 Virtual10 supports and preserved in a complete master. RF-25 then selects only the frozen 25 columns; missingness in unused candidates is never an RF eligibility gate.
 
 The 25 model predictors are 16 Sentinel-2 optical variables, five ERA5-Land variables and four seasonal harmonics. See `docs/PREDICTOR_CATALOG.md`.
 

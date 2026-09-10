@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from et_downscaling.candidate_paths import get_candidate_study_paths
+from et_downscaling.candidate_context import candidate_expected_rows
 from et_downscaling.config import OUTPUT_PERIOD_LABEL
 
 from et_downscaling.training import SPATIAL_BLOCK_SIZE_KM
@@ -144,8 +145,9 @@ def main():
         (s2_availability, "s2 availability"), (hls_availability, "hls availability"),
     ):
         require_unique(table, name)
-        if len(table) != 1150:
-            raise RuntimeError(f"Expected 1150 {name} rows, found {len(table)}")
+        expected = candidate_expected_rows()
+        if len(table) != expected:
+            raise RuntimeError(f"Expected {expected} {name} rows, found {len(table)}")
 
     periods = optical[["station_id", "period_start", "period_days"]].copy()
     eto, daily = aggregate_eto(periods, era5, support)

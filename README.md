@@ -52,11 +52,13 @@ All downloaded data, intermediate tables, models, rasters, diagnostics and
 figures are written under `outputs/`. Everything there is ignored by Git except
 `outputs/README.md`.
 
-The final RF always uses the frozen 25 variables. A separate candidate archive
-can download/materialize every predictor family already implemented in this
-repository (S2/HLS, S1 R077/R142, ERA5-Land, CHIRPS, Landsat LST, albedo/FVC,
-seasonality and associated QA/provenance). Candidate availability never changes
-the final RF feature set or silently removes Virtual10 training rows.
+The final RF always uses the frozen 25 variables. Before model fitting, `fresh`
+materializes every predictor family already implemented in this repository on
+the same 10 Virtual10 MODIS supports (S2/HLS, S1 R077/R142, ERA5-Land, CHIRPS,
+Landsat LST, albedo/FVC, seasonality and associated QA/provenance). The complete
+Virtual10 predictor master is preserved under `outputs/`; RF-25 then selects only
+its frozen 25 columns and the frozen GE90 support-period whitelist. Availability
+of unused candidates never becomes an eligibility gate for RF-25.
 
 ## Fresh run on Windows
 
@@ -70,11 +72,10 @@ python scripts\run_pipeline.py fresh --project ee-sneiderquintero --yes
 ```
 
 `fresh` deletes generated `outputs/` contents, reconstructs the Virtual10
-selection and 25-feature training population from source data, trains and
-validates RF-25, derives the weighted AOA/DI and LPD, produces the three final
-rasters, and then materializes the complete implemented candidate-predictor
-archive. Candidate downloading is deliberately last so it cannot delay the
-scientific core if an unused source is slow.
+selection, downloads/materializes the complete implemented predictor universe
+on those 10 supports, derives the frozen GE90 RF-25 population using only the
+accepted 25 columns, trains and validates RF-25, derives the weighted AOA/DI and
+LPD, and produces the three final rasters.
 
 To resume without deleting completed outputs:
 

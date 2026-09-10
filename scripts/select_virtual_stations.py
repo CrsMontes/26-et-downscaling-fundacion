@@ -1086,6 +1086,7 @@ def main() -> None:
             {
                 "station_id": row["virtual_id"],
                 "station": row["virtual_id"],
+                "station_slug": str(row["virtual_id"]).lower(),
                 "virtual_site": 1,
                 "spatial_block": row[
                     "spatial_block_utm10km"
