@@ -1,3 +1,11 @@
+<!--
+STATUS: HISTORICAL EVIDENCE WITH PARTIALLY CURRENT METHODOLOGICAL DECISIONS.
+The predictor/dependency decisions documented here remain part of the
+methodological provenance, but the reported 833-row performance metrics belong
+to the earlier pre-Virtual-Station population. Current Virtual Station V5
+performance is reported in ../SCIENTIFIC_STATUS.md.
+-->
+
 # Decision 20 — Final Ridge-25 dependencies and dynamic run results
 
 ## Problem

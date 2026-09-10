@@ -1,3 +1,11 @@
+<!--
+STATUS: SUPERSEDED FOR FINAL PRODUCTION STATE.
+This document records the pre-Virtual-Station Ridge25 production freeze and is
+retained only for methodological provenance. Its training population, metrics
+and production details must not be interpreted as the current Virtual Station
+V5 scientific state. See ../SCIENTIFIC_STATUS.md and Decisions 19-23.
+-->
+
 ﻿# Final Ridge-25 production workflow
 
 > **Superseded production snapshot.** This file preserves the pre-exact-overlap freeze. Where it conflicts with Decisions 19 and 21, the later decisions are authoritative.
