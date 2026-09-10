@@ -170,6 +170,18 @@ def build_closure_manifest(
             / "field_comparison"
             / "virtual10_vs_stable_field_metrics.csv"
         ),
+        "field_pairs": (
+            workspace_root
+            / "evaluation"
+            / "field_comparison"
+            / "virtual10_vs_stable_field_pairs.csv"
+        ),
+        "field_comparison_metadata": (
+            workspace_root
+            / "evaluation"
+            / "field_comparison"
+            / "metadata.json"
+        ),
     }
 
     historical_metadata = json.loads(

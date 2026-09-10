@@ -616,32 +616,51 @@ def metric_rows_for_subset(
     comparison_label: str,
     virtual_column: str,
     stable_column: str,
+    include_stable: bool = True,
 ) -> list[dict]:
+    """Calculate field metrics on the scientifically intended sample.
+
+    Virtual-native scenarios use only the field proxy, MODIS parent, and
+    Virtual10 prediction. Stable5 availability must not reduce the native
+    Virtual10 sample.
+
+    Matched scenarios include Stable5 and therefore require all three model
+    predictions on the same station-period rows.
+    """
     required = [
         "ET_field_proxy_mm_period",
         "ET_MODIS_parent_mm_period",
         virtual_column,
-        stable_column,
     ]
-    complete = subset.dropna(
-        subset=required
-    ).copy()
 
-    rows = []
-    for model_name, column in (
+    models = [
         (
             "MODIS_parent",
             "ET_MODIS_parent_mm_period",
         ),
         (
-            "Stable5_Ridge25",
-            stable_column,
-        ),
-        (
             "Virtual10_Ridge25",
             virtual_column,
         ),
-    ):
+    ]
+
+    if include_stable:
+        required.append(stable_column)
+        models.insert(
+            1,
+            (
+                "Stable5_Ridge25",
+                stable_column,
+            ),
+        )
+
+    complete = subset.dropna(
+        subset=required
+    ).copy()
+
+    rows = []
+
+    for model_name, column in models:
         rows.append(
             {
                 "comparison": comparison_label,
@@ -654,6 +673,7 @@ def metric_rows_for_subset(
                 ),
             }
         )
+
     return rows
 
 
@@ -736,6 +756,7 @@ def build_metrics(
                     ),
                     virtual_column=virtual_column,
                     stable_column=stable_column,
+                    include_stable=False,
                 )
             )
 

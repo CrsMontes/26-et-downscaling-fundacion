@@ -112,6 +112,14 @@ def test_build_closure_manifest_contract(tmp_path, monkeypatch):
             "evaluation/field_comparison/"
             "virtual10_vs_stable_field_metrics.csv"
         ): "x\n1\n",
+        (
+            "evaluation/field_comparison/"
+            "virtual10_vs_stable_field_pairs.csv"
+        ): "station_id,period_start\nST01,2022-01-01\n",
+        (
+            "evaluation/field_comparison/"
+            "metadata.json"
+        ): "{}\n",
     }
 
     for relative_path, contents in required_tabular.items():
@@ -226,6 +234,28 @@ def test_build_closure_manifest_contract(tmp_path, monkeypatch):
     )
     assert len(training["sha256"]) == 64
     assert str(tmp_path) not in training["path"]
+
+    field_pairs = manifest["tabular_artifacts"]["field_pairs"]
+    assert field_pairs["path"] == (
+        "evaluation/field_comparison/"
+        "virtual10_vs_stable_field_pairs.csv"
+    )
+    assert len(field_pairs["sha256"]) == 64
+
+    field_metrics = manifest["tabular_artifacts"]["field_metrics"]
+    assert field_metrics["path"] == (
+        "evaluation/field_comparison/"
+        "virtual10_vs_stable_field_metrics.csv"
+    )
+    assert len(field_metrics["sha256"]) == 64
+
+    field_metadata = manifest[
+        "tabular_artifacts"
+    ]["field_comparison_metadata"]
+    assert field_metadata["path"] == (
+        "evaluation/field_comparison/metadata.json"
+    )
+    assert len(field_metadata["sha256"]) == 64
 
     ridge = manifest["model_reconstruction"]["ridge"]
     assert ridge["predictor_count"] == 25
