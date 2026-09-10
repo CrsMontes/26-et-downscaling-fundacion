@@ -784,7 +784,7 @@ def add_s2_spectral_indices(image):
 def add_s2_indices(image):
     """Add spectral indices plus diagnostic FVC and albedo bands.
 
-    Ridge-25 production calls ``add_s2_spectral_indices`` directly so
+    RF-25 production calls ``add_s2_spectral_indices`` directly so
     rejected FVC/albedo variables are not computed in the final model path.
     This richer helper is retained for reproducibility diagnostics.
     """

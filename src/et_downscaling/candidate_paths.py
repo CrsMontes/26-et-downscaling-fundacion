@@ -1,8 +1,7 @@
-"""Canonical external-workspace paths for candidate predictors and sensitivity.
+"""Canonical in-repository output paths for candidate predictor materialization.
 
-The complete 2020-2024 candidate universe is stored outside the Git repository.
-The same candidate data support both the frozen final model and reproducibility
-analyses; only derived reports and diagnostics are regenerated per run.
+Generated candidate data live under ``outputs/`` and are ignored by Git. They
+are kept separate from the frozen RF-25 training population.
 """
 
 from __future__ import annotations
@@ -29,7 +28,7 @@ class CandidateStudyPaths:
 
     @property
     def optical_root(self) -> Path:
-        return self.raw_root / "optical_source_experiment"
+        return self.raw_root / "optical"
 
     @property
     def availability_root(self) -> Path:
@@ -37,19 +36,19 @@ class CandidateStudyPaths:
 
     @property
     def meteorology_root(self) -> Path:
-        return self.raw_root / "meteorology_experiment"
+        return self.raw_root / "meteorology"
 
     @property
     def s1_root(self) -> Path:
-        return self.raw_root / "s1_geometry_experiment"
+        return self.raw_root / "sentinel1"
 
     @property
     def thermal_root(self) -> Path:
-        return self.raw_root / "thermal_availability"
+        return self.raw_root / "landsat_thermal"
 
     @property
     def landsat_lst_root(self) -> Path:
-        return self.raw_root / "predictor_availability_ladder" / "raw" / "landsat_lst"
+        return self.raw_root / "landsat_lst"
 
     @property
     def hls_albedo_fvc_root(self) -> Path:
@@ -74,7 +73,7 @@ def get_candidate_study_paths(project_root: Path) -> CandidateStudyPaths:
         raw_root=workspace.raw_cache / "candidates" / CANDIDATE_PERIOD_LABEL,
         intermediate_root=workspace.master / "candidates" / CANDIDATE_PERIOD_LABEL,
         master_store=workspace.master / "master_predictor_store.parquet",
-        sensitivity_root=workspace.diagnostics / "sensitivity" / CANDIDATE_PERIOD_LABEL,
+        sensitivity_root=workspace.diagnostics / "candidates" / CANDIDATE_PERIOD_LABEL,
         station_support=workspace.raw_cache / "meteorology" / "station_support.csv",
         operational_s2_table=(
             workspace.raw_cache

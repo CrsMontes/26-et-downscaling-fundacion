@@ -6,8 +6,8 @@ Fundación River basin, Colombia.
 `main` contains the final RF-25 workflow. Historical development states remain
 available as Git branches:
 
-- `virtual`: Virtual Station Ridge-era closure immediately before RF promotion.
-- `field`: Field Station / Stable5 state.
+- `virtual`: historical Virtual Station closure immediately before RF promotion.
+- `field`: historical Field Station workflow.
 - `diagnostic`: original diagnostic-reproduction state.
 
 The repository was intentionally disconnected from the old Git remote. Add a

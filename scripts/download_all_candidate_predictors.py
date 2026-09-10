@@ -60,39 +60,39 @@ def main() -> None:
 
     # Earth Engine candidate-family materialization.
     run(
-        "reproducibility/scripts/export_availability_diagnostic.py",
+        "scripts/candidates/export_availability.py",
         *common, "--project", args.project, "--execute",
     )
     run(
-        "reproducibility/scripts/export_optical_source_experiment.py",
+        "scripts/candidates/export_optical_candidates.py",
         *common, "--project", args.project, "--execute",
     )
     run(
-        "reproducibility/scripts/export_s2_rich_optical.py",
+        "scripts/candidates/export_s2_candidates.py",
         *common, "--project", args.project, "--execute",
     )
     run(
-        "reproducibility/scripts/export_s1_geometry_predictors.py",
+        "scripts/candidates/export_s1_candidates.py",
         *common, "--project", args.project, "--execute",
     )
     run(
-        "reproducibility/scripts/export_hls_albedo_fvc.py",
+        "scripts/candidates/export_hls_fvc_albedo_candidates.py",
         *common, "--project", args.project, "--execute",
     )
     run(
-        "reproducibility/scripts/export_thermal_availability.py",
+        "scripts/candidates/export_thermal_candidates.py",
         *common, "--project", args.project, "--execute",
     )
     run(
-        "reproducibility/scripts/export_landsat_lst_predictor.py",
+        "scripts/candidates/export_landsat_lst_candidates.py",
         "--project", args.project, "--execute",
     )
 
     # Local assembly; no additional Earth Engine access.
-    run("reproducibility/scripts/build_meteorology_experiment_table.py")
-    run("reproducibility/scripts/build_optical_source_populations.py")
-    run("reproducibility/scripts/build_experimental_feature_store.py")
-    run("reproducibility/scripts/build_candidate_master.py")
+    run("scripts/candidates/build_meteorology_candidates.py")
+    run("scripts/candidates/build_optical_candidates.py")
+    run("scripts/candidates/build_candidate_feature_store.py")
+    run("scripts/candidates/build_candidate_master.py")
 
     print("\nComplete implemented candidate archive materialized under outputs/current/.")
     print("It is audit/future-analysis data only; RF-25 feature selection was not reopened.")

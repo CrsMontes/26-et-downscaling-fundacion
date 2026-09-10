@@ -1,9 +1,8 @@
 """Final RF-25 production with one global exact-overlap reconciliation.
 
-The legacy tiled module remains unchanged as a diagnostic path. This module
-uses tiles only to obtain the raw RF-25/AOA fields, retains an external
-support halo, mosaics those raw fields, and reconciles once globally against
-native-grid MODIS ET using real fine/coarse overlap areas.
+Tiles are used only to obtain the raw RF-25/AOA fields. The workflow retains
+an external support halo, mosaics those raw fields, and reconciles once
+globally against native-grid MODIS ET using real fine/coarse overlap areas.
 """
 
 from __future__ import annotations
@@ -29,7 +28,7 @@ from .rf25_local_state import (
     RF25_USABLE_SUPPORT_FRACTION,
     score_local_rf25,
 )
-from .local_tiles import (
+from .tiles import (
     CompletedTile,
     Tile,
     _analysis_geometry,

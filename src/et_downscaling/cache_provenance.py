@@ -32,7 +32,7 @@ def satellite_provenance_path(output_path: Path) -> Path:
 
 def build_satellite_provenance(
     optical_source: str,
-    ridge25_only: bool = False,
+    model_only: bool = False,
 ) -> dict[str, object]:
     """Describe the scientifically relevant raw-satellite configuration."""
     source = normalize_optical_source(optical_source)
@@ -43,8 +43,8 @@ def build_satellite_provenance(
         "analysis_start": START_DATE,
         "analysis_end_exclusive": END_DATE,
         "period_label": OUTPUT_PERIOD_LABEL,
-        "ridge25_only": bool(ridge25_only),
-        "sentinel1_queried": not bool(ridge25_only),
+        "model_only": bool(model_only),
+        "sentinel1_queried": not bool(model_only),
     }
 
     if source == "S2":
@@ -65,7 +65,7 @@ def build_satellite_provenance(
 def write_satellite_provenance(
     output_path: Path,
     optical_source: str,
-    ridge25_only: bool = False,
+    model_only: bool = False,
 ) -> Path:
     """Write the raw-satellite sidecar manifest after a successful export."""
     path = satellite_provenance_path(output_path)
@@ -73,7 +73,7 @@ def write_satellite_provenance(
         json.dumps(
             build_satellite_provenance(
                 optical_source,
-                ridge25_only=ridge25_only,
+                model_only=model_only,
             ),
             indent=2,
             sort_keys=True,
@@ -86,7 +86,7 @@ def write_satellite_provenance(
 def validate_satellite_provenance(
     output_path: Path,
     optical_source: str,
-    ridge25_only: bool = False,
+    model_only: bool = False,
 ) -> dict[str, object]:
     """Reject a reusable raw cache with missing or mismatched provenance."""
     output_path = Path(output_path)
@@ -108,7 +108,7 @@ def validate_satellite_provenance(
 
     expected = build_satellite_provenance(
         optical_source,
-        ridge25_only=ridge25_only,
+        model_only=model_only,
     )
     mismatches = {
         key: {

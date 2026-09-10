@@ -31,11 +31,11 @@ def parse_arguments():
     )
     parser.add_argument("--force", action="store_true")
     parser.add_argument(
-        "--ridge25-only",
+        "--model-only",
         action="store_true",
         help=(
             "Export only station support and ERA5-Land required by "
-            "the accepted Ridge-25 model. CHIRPS is not queried."
+            "the accepted RF-25 model. CHIRPS is not queried."
         ),
     )
     parser.add_argument(
@@ -154,7 +154,7 @@ def main():
         support_path,
         era5_path,
     ]
-    if not args.ridge25_only:
+    if not args.model_only:
         required_cache_paths.append(chirps_path)
 
     if all(path.exists() for path in required_cache_paths) and not args.force:
@@ -163,7 +163,7 @@ def main():
             print(path)
         print(
             "CHIRPS queried:",
-            "NO" if args.ridge25_only else "YES",
+            "NO" if args.model_only else "YES",
         )
         print("Use --force only for an intentional rebuild.")
         return
@@ -192,7 +192,7 @@ def main():
     era5_chunk_dir = chunk_root / "era5"
     chirps_chunk_dir = chunk_root / "chirps"
     era5_chunk_dir.mkdir(parents=True, exist_ok=True)
-    if not args.ridge25_only:
+    if not args.model_only:
         chirps_chunk_dir.mkdir(parents=True, exist_ok=True)
 
     era5_chunks = []
@@ -210,7 +210,7 @@ def main():
             era5_chunks.append(path)
 
     chirps_chunks = []
-    if not args.ridge25_only:
+    if not args.model_only:
         for station_index, station_id in enumerate(station_ids, start=1):
             station_support = get_station_support(support_table, station_id)
             for year, window_start, window_end in get_chirps_year_windows():
@@ -241,7 +241,7 @@ def main():
     print("ERA5 rows:", era5_rows)
 
     chirps_rows = None
-    if not args.ridge25_only:
+    if not args.model_only:
         chirps_rows = merge_csv_chunks(chirps_chunks, chirps_path)
         print("CHIRPS rows:", chirps_rows)
     else:
@@ -255,7 +255,7 @@ def main():
     if era5_rows != expected_era5:
         raise RuntimeError(f"ERA5 row count mismatch: {era5_rows} != {expected_era5}")
 
-    if not args.ridge25_only:
+    if not args.model_only:
         expected_chirps_days = (
             date.fromisoformat(END_DATE)
             - (date.fromisoformat(START_DATE) - timedelta(days=30))
@@ -270,7 +270,7 @@ def main():
     print("Meteorology raw export completed:")
     print(support_path)
     print(era5_path)
-    if not args.ridge25_only:
+    if not args.model_only:
         print(chirps_path)
 
 

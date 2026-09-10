@@ -68,12 +68,12 @@ def preflight() -> None:
 
 def run_core(project: str, dates: list[str]) -> None:
     run_script(
-        "select_v5_basin_random_sequential_ge90.py",
+        "select_virtual_stations.py",
         ["--project", project, "--seed", "42", "--n-supports", "10", "--min-ge90-per-year", "20", "--max-candidates", "9123"],
     )
     run_script(
-        "run_v5_basin_experiment.py",
-        ["--project", project, "--extract-only"],
+        "build_virtual_training_population.py",
+        ["--project", project],
     )
     run_script("train_rf25.py", [])
     production_args = ["--project", project]
@@ -155,13 +155,13 @@ def main() -> None:
             run_script("download_all_candidate_predictors.py", ["--project", args.project])
         return
     if args.command == "select":
-        run_script("select_v5_basin_random_sequential_ge90.py", ["--project", args.project, "--seed", "42", "--n-supports", "10", "--min-ge90-per-year", "20", "--max-candidates", "9123"])
+        run_script("select_virtual_stations.py", ["--project", args.project, "--seed", "42", "--n-supports", "10", "--min-ge90-per-year", "20", "--max-candidates", "9123"])
         return
     if args.command == "extract":
-        cmd = ["--project", args.project, "--extract-only"]
+        cmd = ["--project", args.project]
         if args.force:
             cmd.append("--force")
-        run_script("run_v5_basin_experiment.py", cmd)
+        run_script("build_virtual_training_population.py", cmd)
         return
     if args.command == "train":
         run_script("train_rf25.py", [])

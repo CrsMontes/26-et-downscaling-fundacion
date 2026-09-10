@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from et_downscaling.aoa_rf25 import build_rf_weighted_aoa, importance_table
-from et_downscaling.modeling import TARGET_COLUMN, calculate_metrics
+from et_downscaling.metrics import TARGET_COLUMN, calculate_metrics
 from et_downscaling.rf25 import (
     RF25_AOA_FILENAME,
     RF25_METADATA_FILENAME,

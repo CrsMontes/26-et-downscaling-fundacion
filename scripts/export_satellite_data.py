@@ -76,10 +76,10 @@ def parse_arguments():
         ),
     )
     parser.add_argument(
-        "--ridge25-only",
+        "--model-only",
         action="store_true",
         help=(
-            "Build the accepted Ridge-25 raw satellite cache without "
+            "Build the accepted RF-25 raw satellite cache without "
             "querying Sentinel-1. Legacy S1 columns remain as explicit "
             "not-evaluated placeholders for schema compatibility."
         ),
@@ -571,7 +571,7 @@ def main():
         validate_satellite_provenance(
             final_output,
             optical_source,
-            ridge25_only=args.ridge25_only,
+            model_only=args.model_only,
         )
 
         print(
@@ -639,7 +639,7 @@ def main():
 
     s1_collection = (
         None
-        if args.ridge25_only
+        if args.model_only
         else get_sentinel1_collection(
             station_footprints
         )
@@ -647,7 +647,7 @@ def main():
 
     print(
         "Sentinel-1 queried:",
-        "NO" if args.ridge25_only else "YES",
+        "NO" if args.model_only else "YES",
     )
 
     # ========================================================
@@ -975,7 +975,7 @@ def main():
     provenance_path = write_satellite_provenance(
         final_output,
         optical_source,
-        ridge25_only=args.ridge25_only,
+        model_only=args.model_only,
     )
 
     # ========================================================

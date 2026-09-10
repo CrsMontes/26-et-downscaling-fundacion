@@ -12,7 +12,7 @@ import ee
 
 from .config import ANALYSIS_CRS
 from .modis import get_modis_period_end
-from .thermal_availability import (
+from .thermal_candidates import (
     DISTRIBUTED_GRID_M,
     NATIVE_THERMAL_SUPPORT_M_APPROX,
     _st_qa_stats,

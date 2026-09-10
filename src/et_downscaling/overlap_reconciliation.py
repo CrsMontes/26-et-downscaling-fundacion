@@ -7,7 +7,7 @@ builds the real area-overlap operator between the regular 20 m UTM grid and
 the native MODIS sinusoidal grid and solves one global least-squares
 projection subject to exact coarse-support conservation.
 
-The Ridge-25 prediction supplies the fine spatial pattern. The role of this
+The RF-25 prediction supplies the fine spatial pattern. The role of this
 module is only to reconcile that pattern to MODIS support while changing it as
 little as possible under the chosen Euclidean criterion.
 """
@@ -28,9 +28,9 @@ from scipy.sparse.linalg import MatrixRankWarning, spsolve
 import shapely
 
 from .config import ANALYSIS_CRS
-from .local_reconciliation import (
-    RIDGE25_RECONCILIATION_TOLERANCE_MM,
-    RIDGE25_USABLE_SUPPORT_FRACTION,
+from .rf25_local_state import (
+    RF25_RECONCILIATION_TOLERANCE_MM,
+    RF25_USABLE_SUPPORT_FRACTION,
 )
 
 
@@ -417,10 +417,10 @@ def solve_overlap_reconciliation(
     usable: np.ndarray,
     modis_et: np.ndarray,
     edges: OverlapEdges,
-    usable_support_fraction: float = RIDGE25_USABLE_SUPPORT_FRACTION,
-    tolerance_mm: float = RIDGE25_RECONCILIATION_TOLERANCE_MM,
+    usable_support_fraction: float = RF25_USABLE_SUPPORT_FRACTION,
+    tolerance_mm: float = RF25_RECONCILIATION_TOLERANCE_MM,
 ) -> OverlapReconciliationResult:
-    """Reconcile Ridge-25 pattern to MODIS using one global projection.
+    """Reconcile RF-25 pattern to MODIS using one global projection.
 
     Non-usable fine cells are retained only as neutral internal support using
     an overlap-weighted mean Kc. Publication is restricted to originally

@@ -31,10 +31,10 @@ def parse_arguments():
         choices=["S2", "HLS", "HLS_COMBINED"],
     )
     parser.add_argument(
-        "--ridge25-only",
+        "--model-only",
         action="store_true",
         help=(
-            "Build the accepted Ridge-25 master without requiring "
+            "Build the accepted RF-25 master without requiring "
             "CHIRPS. Sentinel-1 legacy columns, when present, are ignored "
             "by final population selection."
         ),
@@ -77,7 +77,7 @@ def main():
         "python scripts/export_meteorology_data.py",
     )
     require_file(era5_path, "python scripts/export_meteorology_data.py")
-    if not args.ridge25_only:
+    if not args.model_only:
         require_file(chirps_path, "python scripts/export_meteorology_data.py")
 
     print("Loading reusable local inputs...")
@@ -102,7 +102,7 @@ def main():
 
     chirps_daily = (
         None
-        if args.ridge25_only
+        if args.model_only
         else pd.read_csv(
             chirps_path,
             dtype=station_dtype,
@@ -127,11 +127,11 @@ def main():
     print("Reference-ET complete:", int(master["reference_et_complete"].sum()))
     print("Meteorology complete:", int(master["meteo_complete"].sum()))
     print("Target complete:", int(master["target_complete"].sum()))
-    if args.ridge25_only:
-        print("Final Ridge-25 meteorology source: ERA5-Land only")
+    if args.model_only:
+        print("Final RF-25 meteorology source: ERA5-Land only")
         print("CHIRPS required: NO")
         print("Sentinel-1 eligibility gate: NO")
-        print("Final optical coverage gate: evaluated in Ridge population (GE90)")
+        print("Final optical coverage gate: evaluated in RF training population (GE90)")
     else:
         print(
             "Satellite extraction complete:",
