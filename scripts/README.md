@@ -1,61 +1,22 @@
-# Virtual Station operational scripts
+# Operational scripts
 
-The `main` branch is the Virtual Station V5 workflow.
-
-Normal entry point:
+The supported entry point on `main` is:
 
 ```powershell
 python scripts/run_pipeline.py <command>
 ```
 
-Running `run_pipeline.py` without a command only prints help. No selection,
-training, Earth Engine query, download, or raster production is started
-implicitly.
+Commands:
 
-## Local validation and derived-result commands
+- `preflight`: validate the three portable inputs and print the final scientific configuration.
+- `fresh`: delete generated outputs and rebuild selection, training data, RF-25, weighted AOA/DI, final rasters and the full implemented candidate archive.
+- `run`: resume/re-run the same workflow without deleting outputs first.
+- `select`: reproduce the frozen Virtual10 support-selection rule.
+- `extract`: reconstruct the final 25-feature GE90 training population only.
+- `train`: spatial OOF + LOYO validation, final RF fit, RF-weighted DI/AOA and LPD.
+- `produce`: exact-overlap RF-25 raster production for one or more dates.
+- `download-candidates`: materialize all already-implemented candidate predictor families separately from final RF training.
 
-```powershell
-python scripts/run_pipeline.py validate
-python scripts/run_pipeline.py audit
-python scripts/run_pipeline.py summarize
-python scripts/run_pipeline.py compare-coverage `
-    --reference-workspace ..\ET_fundacion_workspace_field_station
-```
-
-`validate` and `audit` are read-only by default. `summarize` and `compare-coverage` do not retrain models or download data, but they may rewrite derived summary/comparison tables in the Virtual Station evaluation workspace.
-
-## Explicit reproduction commands
-
-These commands may query Earth Engine or rewrite generated outputs and therefore
-must be requested explicitly:
-
-```powershell
-python scripts/run_pipeline.py reproduce-selection `
-    --project ee-sneiderquintero
-
-python scripts/run_pipeline.py reproduce-training `
-    --project ee-sneiderquintero
-
-python scripts/run_pipeline.py evaluate-field `
-    --project ee-sneiderquintero `
-    --reference-workspace ..\ET_fundacion_workspace_field_station
-
-python scripts/run_pipeline.py produce `
-    --project ee-sneiderquintero `
-    --date 2020-03-13
-```
-
-The frozen V5 selection uses seed 42, 10 supports in 10 fixed UTM 10 km blocks,
-and the pre-specified GE90 availability rule. Reproduction must not change those
-scientific decisions.
-
-`compare_v5_basin_coverage.py` is intentionally read-only: it compares existing
-V5 and Stable5 rasters and never regenerates them.
-
-`produce_virtual_rasters.py` reconstructs Ridge25 and the equal-weight AOA from
-the frozen V5 training population and generates only missing explicitly
-requested dates. Existing scientific rasters are never overwritten.
-
-Stable5 is external to this repository. Any Stable5 comparison must receive an
-explicit `--reference-workspace` pointing to
-`ET_fundacion_workspace_field_station`.
+Generated material lives below `outputs/` and is ignored by Git. No Google
+Drive export is used. See `docs/METHODOLOGY.md` and
+`docs/EXPERIMENT_HISTORY.md` for the scientific contract and history.

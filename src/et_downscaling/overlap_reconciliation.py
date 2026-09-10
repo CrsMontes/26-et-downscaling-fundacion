@@ -322,6 +322,24 @@ def build_overlap_edges(
             continue
 
         minx, miny, maxx, maxy = polygon.bounds
+
+        # A native MODIS parent is only represented when its complete
+        # transformed footprint is enclosed by the fine support grid.
+        # Clipping a window at the fine-raster edge would otherwise turn a
+        # truncated external parent into a falsely represented parent.
+        fine_left = float(fine_transform.c)
+        fine_top = float(fine_transform.f)
+        fine_right = fine_left + fine_width * pixel_width
+        fine_bottom = fine_top - fine_height * pixel_height
+        bounds_tolerance = 1e-7
+        if (
+            minx < fine_left - bounds_tolerance
+            or maxx > fine_right + bounds_tolerance
+            or miny < fine_bottom - bounds_tolerance
+            or maxy > fine_top + bounds_tolerance
+        ):
+            continue
+
         raw_window = rasterio.windows.from_bounds(
             minx,
             miny,

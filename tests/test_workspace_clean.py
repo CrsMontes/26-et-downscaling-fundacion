@@ -22,16 +22,14 @@ def test_workspace_override_is_external(monkeypatch, tmp_path):
     assert paths.archive.is_dir()
 
 
-def test_default_workspace_is_sibling(monkeypatch, tmp_path):
+def test_default_workspace_is_repository_local(monkeypatch, tmp_path):
     monkeypatch.delenv(WORKSPACE_ENV_VAR, raising=False)
     repo = tmp_path / "26-et-downscaling-fundacion"
     repo.mkdir()
 
     paths = get_workspace_paths(repo)
 
-    assert paths.root == (
-        tmp_path / "ET_fundacion_workspace" / "current"
-    ).resolve()
+    assert paths.root == (repo / "outputs" / "current").resolve()
 
 
 def test_portable_inputs_are_exactly_three(tmp_path):

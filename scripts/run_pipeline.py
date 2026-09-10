@@ -1,267 +1,180 @@
-﻿"""Command dispatcher for the ET Fundacion Virtual Station workflow.
-
-The default command is intentionally non-destructive: running this file without
-a subcommand only prints help. Expensive or state-changing operations require
-an explicit reproduction/production subcommand.
-"""
+"""Single entry point for the clean RF-25 ET Fundación repository."""
 
 from __future__ import annotations
 
 import argparse
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import et_downscaling
+from et_downscaling.workspace import require_portable_inputs
 
 
-def project_root() -> Path:
+DEFAULT_DATES = ["2020-03-13", "2021-11-25", "2022-03-30"]
+
+
+def root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def validate_imported_package_root(
-    repository_root: Path,
-) -> Path:
+def validate_imported_package_root(repository_root: Path) -> Path:
     """Fail before execution if et_downscaling comes from another checkout."""
-    expected = (
-        Path(repository_root)
-        / "src"
-        / "et_downscaling"
-    ).resolve()
-
-    imported = Path(
-        et_downscaling.__file__
-    ).resolve()
-
+    expected = (Path(repository_root) / "src" / "et_downscaling").resolve()
+    imported = Path(et_downscaling.__file__).resolve()
     try:
         imported.relative_to(expected)
     except ValueError:
         raise RuntimeError(
-            "The imported et_downscaling package belongs "
-            "to a different repository.\n"
+            "The imported et_downscaling package belongs to a different repository.\n"
             f"Expected: {expected}\n"
             f"Imported: {imported}\n"
             "No pipeline work was started.\n"
-            "Set PYTHONPATH to this checkout's src directory "
-            "or install this repository in editable mode."
+            "Run `python -m pip install -e .` from this repository first."
         ) from None
-
     return imported
 
 
-def run_script(script_name: str, args: list[str]) -> None:
-    command = [
-        sys.executable,
-        str(project_root() / "scripts" / script_name),
-        *args,
-    ]
-    print(">", subprocess.list2cmdline(command))
-    subprocess.run(command, cwd=project_root(), check=True)
+def run_script(name: str, arguments: list[str]) -> None:
+    command = [sys.executable, str(root() / "scripts" / name), *arguments]
+    print("\n>", subprocess.list2cmdline(command), flush=True)
+    subprocess.run(command, cwd=root(), check=True)
 
 
-def add_workspace_argument(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--workspace-root",
-        default=None,
-        help=(
-            "Virtual Station workspace root. Defaults to sibling "
-            "ET_fundacion_workspace_virtual_station."
-        ),
+def clean_outputs() -> None:
+    output = root() / "outputs"
+    output.mkdir(parents=True, exist_ok=True)
+    for child in output.iterdir():
+        if child.name == "README.md":
+            continue
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+
+
+def preflight() -> None:
+    inputs = require_portable_inputs(root())
+    print("Repository:", root())
+    print("Portable inputs:")
+    for name, path in inputs.items():
+        print(f"  {name}: {path}")
+    print("Output root:", root() / "outputs")
+    print("Final model: RF-25, fixed 25 predictors, no tuning")
+    print("AOA: RF-weighted DI + spatial-CV threshold; LPD diagnostic")
+    print("Google Drive: not used")
+
+
+def run_core(project: str, dates: list[str]) -> None:
+    run_script(
+        "select_v5_basin_random_sequential_ge90.py",
+        ["--project", project, "--seed", "42", "--n-supports", "10", "--min-ge90-per-year", "20", "--max-candidates", "9123"],
     )
+    run_script(
+        "run_v5_basin_experiment.py",
+        ["--project", project, "--extract-only"],
+    )
+    run_script("train_rf25.py", [])
+    production_args = ["--project", project]
+    for value in dates:
+        production_args += ["--date", value]
+    run_script("produce_rf25_rasters.py", production_args)
 
 
-def append_workspace(args: list[str], value: str | None) -> None:
-    if value:
-        args.extend(["--workspace-root", value])
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="command")
+
+    sub.add_parser("preflight")
+
+    for name in ("fresh", "run"):
+        item = sub.add_parser(name)
+        item.add_argument("--project", required=True)
+        item.add_argument("--date", dest="dates", action="append", default=None)
+        item.add_argument(
+            "--skip-candidates",
+            action="store_true",
+            help="Skip the comprehensive five-station candidate archive; final RF-25 is unaffected.",
+        )
+        if name == "fresh":
+            item.add_argument(
+                "--yes",
+                action="store_true",
+                help="Required acknowledgement that generated outputs will be deleted before the run.",
+            )
+
+    select = sub.add_parser("select")
+    select.add_argument("--project", required=True)
+
+    extract = sub.add_parser("extract")
+    extract.add_argument("--project", required=True)
+    extract.add_argument("--force", action="store_true")
+
+    sub.add_parser("train")
+
+    candidates = sub.add_parser("download-candidates")
+    candidates.add_argument("--project", required=True)
+
+    produce = sub.add_parser("produce")
+    produce.add_argument("--project", required=True)
+    produce.add_argument("--date", dest="dates", action="append", default=None)
+
+    return parser
+
+
+def parse_args() -> argparse.Namespace:
+    return build_parser().parse_args()
 
 
 def main() -> None:
-    validate_imported_package_root(project_root())
-
-    parser = argparse.ArgumentParser(
-        description="ET Fundacion Virtual Station V5 workflow."
-    )
-    subparsers = parser.add_subparsers(dest="command")
-
-    validate = subparsers.add_parser(
-        "validate",
-        help="Validate the frozen V5 selection, population, AOA and rasters.",
-    )
-    add_workspace_argument(validate)
-
-    audit = subparsers.add_parser(
-        "audit",
-        help="Audit frozen selection versus extracted training periods.",
-    )
-    add_workspace_argument(audit)
-    audit.add_argument("--write-report", action="store_true")
-
-    reproduce_selection = subparsers.add_parser(
-        "reproduce-selection",
-        help=(
-            "Explicitly replay the frozen candidate-order/GE90 selection. "
-            "This queries Earth Engine and is not run by default."
-        ),
-    )
-    add_workspace_argument(reproduce_selection)
-    reproduce_selection.add_argument("--project", required=True)
-    reproduce_selection.add_argument("--seed", type=int, default=42)
-    reproduce_selection.add_argument("--min-ge90-per-year", type=int, default=1)
-
-    reproduce_training = subparsers.add_parser(
-        "reproduce-training",
-        help=(
-            "Explicitly rebuild the V5 extraction/training/CV state. "
-            "This may query Earth Engine and rewrite training/evaluation outputs."
-        ),
-    )
-    add_workspace_argument(reproduce_training)
-    reproduce_training.add_argument("--project", required=True)
-    reproduce_training.add_argument("--reference-workspace", default=None)
-    reproduce_training.add_argument("--stable-run-dir", default=None)
-
-    evaluate_field = subparsers.add_parser(
-        "evaluate-field",
-        help="Reproduce the field-derived ET proxy comparison.",
-    )
-    add_workspace_argument(evaluate_field)
-    evaluate_field.add_argument("--project", required=True)
-    evaluate_field.add_argument("--reference-workspace", required=True)
-    evaluate_field.add_argument("--stable-run-dir", default=None)
-
-    produce = subparsers.add_parser(
-        "produce",
-        help=(
-            "Generate missing V5 20 m rasters for explicitly requested dates. "
-            "Existing scientific rasters are never overwritten."
-        ),
-    )
-    add_workspace_argument(produce)
-    produce.add_argument("--project", required=True)
-    produce.add_argument(
-        "--date",
-        dest="dates",
-        action="append",
-        required=True,
-        help="MODIS-period start date YYYY-MM-DD. Repeat for multiple dates.",
-    )
-    produce.add_argument("--tile-size-m", type=int, default=4000)
-    produce.add_argument("--min-tile-size-m", type=int, default=500)
-
-    compare = subparsers.add_parser(
-        "compare-coverage",
-        help="Compare existing V5 and Stable5 rasters without regeneration.",
-    )
-    add_workspace_argument(compare)
-    compare.add_argument("--reference-workspace", required=True)
-    compare.add_argument(
-        "--date",
-        dest="dates",
-        action="append",
-        default=None,
-    )
-
-    summarize = subparsers.add_parser(
-        "summarize",
-        help="Summarize preserved V5 scientific results locally.",
-    )
-    add_workspace_argument(summarize)
-
+    validate_imported_package_root(root())
+    parser = build_parser()
     args = parser.parse_args()
-
     if args.command is None:
         parser.print_help()
         return
-
-    if args.command == "validate":
-        command_args: list[str] = []
-        append_workspace(command_args, args.workspace_root)
-        run_script("validate_frozen_state.py", command_args)
+    if args.command == "preflight":
+        preflight()
         return
-
-    if args.command == "audit":
-        command_args = []
-        append_workspace(command_args, args.workspace_root)
-        if args.write_report:
-            command_args.append("--write-report")
-        run_script("audit_v5_selection_training_consistency.py", command_args)
+    if args.command == "fresh":
+        if not args.yes:
+            raise SystemExit("fresh requires --yes because it deletes generated outputs/ contents.")
+        preflight()
+        clean_outputs()
+        dates = args.dates or DEFAULT_DATES
+        run_core(args.project, dates)
+        if not args.skip_candidates:
+            run_script("download_all_candidate_predictors.py", ["--project", args.project])
         return
-
-    if args.command == "reproduce-selection":
-        command_args = [
-            "--project",
-            args.project,
-            "--seed",
-            str(args.seed),
-            "--n-supports",
-            "10",
-            "--min-ge90-per-year",
-            str(args.min_ge90_per_year),
-            "--max-candidates",
-            "9123",
-        ]
-        append_workspace(command_args, args.workspace_root)
-        run_script("select_v5_basin_random_sequential_ge90.py", command_args)
+    if args.command == "run":
+        preflight()
+        dates = args.dates or DEFAULT_DATES
+        run_core(args.project, dates)
+        if not args.skip_candidates:
+            run_script("download_all_candidate_predictors.py", ["--project", args.project])
         return
-
-    if args.command == "reproduce-training":
-        command_args = ["--project", args.project]
-        append_workspace(command_args, args.workspace_root)
-        if args.reference_workspace:
-            command_args.extend(
-                ["--reference-workspace", args.reference_workspace]
-            )
-        if args.stable_run_dir:
-            command_args.extend(["--stable-run-dir", args.stable_run_dir])
-        run_script("run_v5_basin_experiment.py", command_args)
+    if args.command == "select":
+        run_script("select_v5_basin_random_sequential_ge90.py", ["--project", args.project, "--seed", "42", "--n-supports", "10", "--min-ge90-per-year", "20", "--max-candidates", "9123"])
         return
-
-    if args.command == "evaluate-field":
-        command_args = [
-            "--project",
-            args.project,
-            "--reference-workspace",
-            args.reference_workspace,
-        ]
-        append_workspace(command_args, args.workspace_root)
-        if args.stable_run_dir:
-            command_args.extend(["--stable-run-dir", args.stable_run_dir])
-        run_script("evaluate_v5_field_proxy.py", command_args)
+    if args.command == "extract":
+        cmd = ["--project", args.project, "--extract-only"]
+        if args.force:
+            cmd.append("--force")
+        run_script("run_v5_basin_experiment.py", cmd)
         return
-
+    if args.command == "train":
+        run_script("train_rf25.py", [])
+        return
+    if args.command == "download-candidates":
+        run_script("download_all_candidate_predictors.py", ["--project", args.project])
+        return
     if args.command == "produce":
-        command_args = [
-            "--project",
-            args.project,
-            "--tile-size-m",
-            str(args.tile_size_m),
-            "--min-tile-size-m",
-            str(args.min_tile_size_m),
-        ]
-        append_workspace(command_args, args.workspace_root)
-        for date_text in args.dates:
-            command_args.extend(["--date", date_text])
-        run_script("produce_virtual_rasters.py", command_args)
+        cmd = ["--project", args.project]
+        for value in args.dates or DEFAULT_DATES:
+            cmd += ["--date", value]
+        run_script("produce_rf25_rasters.py", cmd)
         return
-
-    if args.command == "compare-coverage":
-        command_args = [
-            "--reference-workspace",
-            args.reference_workspace,
-        ]
-        append_workspace(command_args, args.workspace_root)
-        if args.dates:
-            for date_text in args.dates:
-                command_args.extend(["--date", date_text])
-        run_script("compare_v5_basin_coverage.py", command_args)
-        return
-
-    if args.command == "summarize":
-        command_args = []
-        append_workspace(command_args, args.workspace_root)
-        run_script("summarize_results.py", command_args)
-        return
-
     raise RuntimeError(f"Unhandled command: {args.command}")
 
 

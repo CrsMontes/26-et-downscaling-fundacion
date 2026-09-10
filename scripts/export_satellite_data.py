@@ -85,6 +85,12 @@ def parse_arguments():
         ),
     )
 
+    parser.add_argument(
+        "--project",
+        default=None,
+        help="Google Cloud project ID with Earth Engine access. If omitted, prompt interactively.",
+    )
+
     return parser.parse_args()
 
 
@@ -92,7 +98,13 @@ def parse_arguments():
 # Earth Engine initialization
 # ============================================================
 
-def initialize_earth_engine():
+def initialize_earth_engine(project_id=None):
+    if project_id:
+        ee.Initialize(project=project_id)
+        ee.Number(1).getInfo()
+        print("Earth Engine initialized with project:", project_id)
+        return project_id
+
     while True:
         project_id = input(
             "Google Cloud Project ID: "
@@ -578,7 +590,7 @@ def main():
     # Earth Engine
     # ========================================================
 
-    initialize_earth_engine()
+    initialize_earth_engine(args.project)
 
     print(
         "Analysis period:",

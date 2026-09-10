@@ -1,0 +1,993 @@
+"""Final RF-25 production with one global exact-overlap reconciliation.
+
+The legacy tiled module remains unchanged as a diagnostic path. This module
+uses tiles only to obtain the raw RF-25/AOA fields, retains an external
+support halo, mosaics those raw fields, and reconciles once globally against
+native-grid MODIS ET using real fine/coarse overlap areas.
+"""
+
+from __future__ import annotations
+
+import csv
+import hashlib
+import json
+import math
+from pathlib import Path
+
+import ee
+import numpy as np
+import rasterio
+from rasterio.features import bounds as geometry_bounds
+from rasterio.features import rasterize
+from rasterio.transform import Affine, from_origin
+from rasterio.windows import Window
+from rasterio.warp import transform_geom
+
+from .config import ANALYSIS_CRS
+from .rf25_local_state import (
+    RF25_RECONCILIATION_TOLERANCE_MM,
+    RF25_USABLE_SUPPORT_FRACTION,
+    score_local_rf25,
+)
+from .local_tiles import (
+    CompletedTile,
+    Tile,
+    _analysis_geometry,
+    _normalize_tile_size,
+    build_initial_tiles,
+)
+from .overlap_reconciliation import (
+    build_native_modis_grid,
+    build_overlap_edges,
+    materialize_active_values,
+    solve_overlap_reconciliation,
+)
+from .production import (
+    PREDICTION_SCALE_M,
+    PROCESSING_BUFFER_M,
+    build_modis_period_context,
+)
+from .rf25 import RF25_MODEL_FEATURES, rf25_model_signature
+from .ee_download import (
+    DIRECT_DOWNLOAD_MAX_ATTEMPTS,
+    OUTPUT_NODATA,
+    download_ee_bytes,
+    read_downloaded_array,
+)
+from .rf25_production import build_rf25_production_stack
+from .workspace import get_workspace_paths
+
+
+RF25_EXACT_OVERLAP_PRODUCTION_VERSION = (
+    "rf25_cs050_ge90_weighted_aoa_exact_overlap_support90_tol001_v1"
+)
+
+RAW_TILE_BANDS = [
+    "Kc_raw",
+    "dissimilarity_index",
+    "local_point_density",
+    "stack_valid",
+    "AOA_inside",
+    "usable",
+    "support_domain",
+]
+
+OUTPUT_BANDS = [
+    "ET_mm_period",
+    "Kc_raw",
+    "dissimilarity_index",
+    "local_point_density",
+    "stack_valid",
+    "AOA_inside",
+    "usable",
+    "usable_fraction",
+    "coarse_eligible",
+    "ET_conservation_error_mm",
+]
+
+CONSERVATION_SCOPE = (
+    "full_reconciled_modis_support_before_publication_mask"
+)
+PUBLISHED_RASTER_CONSERVATION = (
+    "not_guaranteed_after_publication_mask"
+)
+
+
+def build_production_scientific_signature(model, aoa_parameters) -> str:
+    """Hash the fitted RF and weighted-AOA state defining raw predictions."""
+    digest = hashlib.sha256()
+
+    def update_text(value) -> None:
+        digest.update(str(value).encode("utf-8"))
+        digest.update(b"\0")
+
+    def update_array(value) -> None:
+        array = np.ascontiguousarray(np.asarray(value, dtype="<f8"))
+        digest.update(str(array.shape).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(array.tobytes(order="C"))
+        digest.update(b"\0")
+
+    update_text(RF25_EXACT_OVERLAP_PRODUCTION_VERSION)
+    update_text(rf25_model_signature(model))
+    for name in RF25_MODEL_FEATURES:
+        update_text(name)
+    for name in aoa_parameters.feature_names:
+        update_text(name)
+    update_text(aoa_parameters.method)
+    update_text(aoa_parameters.group_column)
+    update_array(aoa_parameters.means)
+    update_array(aoa_parameters.scales)
+    update_array(aoa_parameters.raw_importance)
+    update_array(aoa_parameters.weights)
+    update_array(aoa_parameters.training_weighted)
+    update_array(aoa_parameters.training_di)
+    update_array(aoa_parameters.training_lpd)
+    update_array([float(aoa_parameters.mean_training_distance)])
+    update_array([float(aoa_parameters.threshold)])
+    return digest.hexdigest()
+
+
+def _processing_grid(tile: Tile) -> tuple[float, float, float, float, int, int, Affine]:
+    scale = float(PREDICTION_SCALE_M)
+    buffer_m = float(PROCESSING_BUFFER_M)
+    xmin = tile.xmin - buffer_m
+    xmax = tile.xmax + buffer_m
+    ymin = tile.ymin - buffer_m
+    ymax = tile.ymax + buffer_m
+    width = int(round((xmax - xmin) / scale))
+    height = int(round((ymax - ymin) / scale))
+    transform = from_origin(xmin, ymax, scale, scale)
+    return xmin, ymin, xmax, ymax, width, height, transform
+
+
+def _expected_tile_transform(tile: Tile) -> Affine:
+    return from_origin(
+        tile.xmin,
+        tile.ymax,
+        PREDICTION_SCALE_M,
+        PREDICTION_SCALE_M,
+    )
+
+
+def _support_tiles(
+    project_root: Path,
+    tile_size_m: int,
+) -> tuple[list[Tile], tuple[float, float, float, float], tuple[float, float, float, float]]:
+    """Return basin tiles plus a deterministic halo at least 1 km wide."""
+    basin_tiles, basin_grid_bounds = build_initial_tiles(
+        project_root,
+        tile_size_m=tile_size_m,
+    )
+    if not basin_tiles:
+        raise RuntimeError("No basin tiles were generated.")
+
+    tile_size = float(basin_tiles[0].width_m)
+    halo_rings = max(1, int(math.ceil(float(PROCESSING_BUFFER_M) / tile_size)))
+
+    by_origin: dict[tuple[float, float], Tile] = {}
+    for tile in basin_tiles:
+        for dy in range(-halo_rings, halo_rings + 1):
+            for dx in range(-halo_rings, halo_rings + 1):
+                xmin = tile.xmin + dx * tile_size
+                ymin = tile.ymin + dy * tile_size
+                key = (xmin, ymin)
+                if key in by_origin:
+                    continue
+                xmax = xmin + tile_size
+                ymax = ymin + tile_size
+                by_origin[key] = Tile(
+                    xmin=xmin,
+                    ymin=ymin,
+                    xmax=xmax,
+                    ymax=ymax,
+                    tile_id=f"sx{int(round(xmin))}_sy{int(round(ymin))}",
+                    level=0,
+                )
+
+    tiles = sorted(
+        by_origin.values(),
+        key=lambda item: (-item.ymax, item.xmin),
+    )
+    support_bounds = (
+        min(item.xmin for item in tiles),
+        min(item.ymin for item in tiles),
+        max(item.xmax for item in tiles),
+        max(item.ymax for item in tiles),
+    )
+    return tiles, support_bounds, basin_grid_bounds
+
+
+def _build_raw_tile(
+    period_start: str,
+    model,
+    aoa_parameters,
+    tile: Tile,
+    timeout_seconds: int,
+    scientific_signature: str | None = None,
+) -> tuple[np.ndarray, dict[str, object]]:
+    core = ee.Geometry.Rectangle(
+        [tile.xmin, tile.ymin, tile.xmax, tile.ymax],
+        proj=ANALYSIS_CRS,
+        geodesic=False,
+    )
+    context = build_rf25_production_stack(
+        period_start_text=period_start,
+        basin_geometry=core,
+    )
+
+    (
+        source_xmin,
+        source_ymin,
+        source_xmax,
+        source_ymax,
+        source_width,
+        source_height,
+        requested_transform,
+    ) = _processing_grid(tile)
+
+    predictor_image = context["stack"].select(RF25_MODEL_FEATURES).toFloat()
+    parameters = {
+        "bands": RF25_MODEL_FEATURES,
+        "crs": ANALYSIS_CRS,
+        "crs_transform": [
+            PREDICTION_SCALE_M,
+            0,
+            source_xmin,
+            0,
+            -PREDICTION_SCALE_M,
+            source_ymax,
+        ],
+        "dimensions": [source_width, source_height],
+        "format": "GEO_TIFF",
+    }
+    payload = download_ee_bytes(
+        predictor_image,
+        parameters,
+        timeout_seconds,
+    )
+    predictor_bands, transform, crs = read_downloaded_array(payload)
+
+    expected_shape = (
+        len(RF25_MODEL_FEATURES),
+        source_height,
+        source_width,
+    )
+    if predictor_bands.shape != expected_shape:
+        raise RuntimeError(
+            f"Downloaded predictor shape {predictor_bands.shape}; "
+            f"expected {expected_shape}."
+        )
+    if crs is None:
+        raise RuntimeError("Downloaded predictor stack has no CRS.")
+    if not transform.almost_equals(requested_transform):
+        raise RuntimeError("Downloaded predictor transform differs from requested 20 m grid.")
+
+    cube = np.moveaxis(
+        predictor_bands.filled(np.nan),
+        0,
+        -1,
+    ).astype(np.float64)
+    state = score_local_rf25(
+        predictor_cube=cube,
+        model=model,
+        aoa_parameters=aoa_parameters,
+    )
+
+    buffer_pixels_float = float(PROCESSING_BUFFER_M) / float(PREDICTION_SCALE_M)
+    buffer_pixels = int(round(buffer_pixels_float))
+    if not math.isclose(buffer_pixels_float, buffer_pixels, abs_tol=1e-9):
+        raise RuntimeError("Production buffer is not aligned with the 20 m grid.")
+
+    rs = slice(buffer_pixels, buffer_pixels + tile.height_px)
+    cs = slice(buffer_pixels, buffer_pixels + tile.width_px)
+    support = np.ones((tile.height_px, tile.width_px), dtype=np.float64)
+
+    output = np.stack(
+        [
+            state.kc_raw[rs, cs],
+            state.dissimilarity_index[rs, cs],
+            state.local_point_density[rs, cs].astype(np.float64),
+            state.stack_valid[rs, cs].astype(np.float64),
+            state.aoa_inside[rs, cs].astype(np.float64),
+            state.usable[rs, cs].astype(np.float64),
+            support,
+        ],
+        axis=0,
+    )
+
+    if scientific_signature is None:
+        scientific_signature = build_production_scientific_signature(
+            model,
+            aoa_parameters,
+        )
+
+    return output, {
+        "production_method_version": RF25_EXACT_OVERLAP_PRODUCTION_VERSION,
+        "scientific_signature": scientific_signature,
+        "period_start": period_start,
+        "tile_id": tile.tile_id,
+        "tile_role": "raw_support",
+        "stack_valid_pixels": int(state.stack_valid[rs, cs].sum()),
+        "usable_pixels": int(state.usable[rs, cs].sum()),
+    }
+
+
+def _validate_raw_tile(path: Path, tile: Tile) -> None:
+    with rasterio.open(path) as dataset:
+        if dataset.count != len(RAW_TILE_BANDS):
+            raise RuntimeError(f"{path} band-count mismatch.")
+        if dataset.width != tile.width_px or dataset.height != tile.height_px:
+            raise RuntimeError(f"{path} tile dimensions mismatch.")
+        if tuple(dataset.descriptions) != tuple(RAW_TILE_BANDS):
+            raise RuntimeError(f"{path} raw band descriptions mismatch.")
+        if dataset.crs is None or dataset.crs.to_string() != ANALYSIS_CRS:
+            raise RuntimeError(f"{path} CRS mismatch.")
+        if not dataset.transform.almost_equals(_expected_tile_transform(tile)):
+            raise RuntimeError(f"{path} transform mismatch.")
+
+
+def _write_raw_tile(path: Path, tile: Tile, data: np.ndarray) -> None:
+    profile = {
+        "driver": "GTiff",
+        "width": tile.width_px,
+        "height": tile.height_px,
+        "count": len(RAW_TILE_BANDS),
+        "dtype": "float32",
+        "crs": ANALYSIS_CRS,
+        "transform": _expected_tile_transform(tile),
+        "nodata": OUTPUT_NODATA,
+        "compress": "deflate",
+        "tiled": True,
+        "blockxsize": 256,
+        "blockysize": 256,
+    }
+    prepared = np.where(np.isfinite(data), data, OUTPUT_NODATA).astype(np.float32)
+    with rasterio.open(path, "w", **profile) as destination:
+        destination.write(prepared)
+        for index, name in enumerate(RAW_TILE_BANDS, start=1):
+            destination.set_band_description(index, name)
+
+
+def _download_raw_tile(
+    period_start: str,
+    model,
+    aoa_parameters,
+    tile: Tile,
+    tile_directory: Path,
+    timeout_seconds: int,
+    scientific_signature: str | None = None,
+) -> CompletedTile:
+    tile_directory.mkdir(parents=True, exist_ok=True)
+    path = tile_directory / f"{tile.tile_id}.tif"
+    metadata_path = tile_directory / f"{tile.tile_id}.json"
+
+    if scientific_signature is None:
+        scientific_signature = build_production_scientific_signature(
+            model,
+            aoa_parameters,
+        )
+
+    if path.is_file() and metadata_path.is_file():
+        try:
+            _validate_raw_tile(path, tile)
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            if metadata.get("production_method_version") != RF25_EXACT_OVERLAP_PRODUCTION_VERSION:
+                raise RuntimeError("Cached tile version mismatch.")
+            if metadata.get("scientific_signature") != scientific_signature:
+                raise RuntimeError("Cached tile scientific signature mismatch.")
+            if metadata.get("period_start") != period_start:
+                raise RuntimeError("Cached tile period mismatch.")
+            if metadata.get("tile_role") != "raw_support":
+                raise RuntimeError("Cached tile role mismatch.")
+            return CompletedTile(tile, path)
+        except Exception:
+            path.unlink(missing_ok=True)
+            metadata_path.unlink(missing_ok=True)
+
+    data, metadata = _build_raw_tile(
+        period_start=period_start,
+        model=model,
+        aoa_parameters=aoa_parameters,
+        tile=tile,
+        timeout_seconds=timeout_seconds,
+        scientific_signature=scientific_signature,
+    )
+    temporary = path.with_suffix(".part.tif")
+    temporary_meta = metadata_path.with_suffix(".part.json")
+    temporary.unlink(missing_ok=True)
+    temporary_meta.unlink(missing_ok=True)
+    _write_raw_tile(temporary, tile, data)
+    _validate_raw_tile(temporary, tile)
+    temporary_meta.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    temporary.replace(path)
+    temporary_meta.replace(metadata_path)
+    return CompletedTile(tile, path)
+
+
+def _write_manifest(completed: list[CompletedTile], path: Path) -> None:
+    with path.open("w", newline="", encoding="utf-8-sig") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "tile_id",
+                "xmin",
+                "ymin",
+                "xmax",
+                "ymax",
+                "width_px",
+                "height_px",
+                "path",
+            ],
+        )
+        writer.writeheader()
+        for item in completed:
+            tile = item.tile
+            writer.writerow(
+                {
+                    "tile_id": tile.tile_id,
+                    "xmin": tile.xmin,
+                    "ymin": tile.ymin,
+                    "xmax": tile.xmax,
+                    "ymax": tile.ymax,
+                    "width_px": tile.width_px,
+                    "height_px": tile.height_px,
+                    "path": str(item.path),
+                }
+            )
+
+
+def _mosaic_raw_tiles(
+    completed: list[CompletedTile],
+    output_path: Path,
+    bounds: tuple[float, float, float, float],
+) -> Path:
+    xmin, ymin, xmax, ymax = bounds
+    scale = float(PREDICTION_SCALE_M)
+    width = int(round((xmax - xmin) / scale))
+    height = int(round((ymax - ymin) / scale))
+    transform = from_origin(xmin, ymax, scale, scale)
+    profile = {
+        "driver": "GTiff",
+        "width": width,
+        "height": height,
+        "count": len(RAW_TILE_BANDS),
+        "dtype": "float32",
+        "crs": ANALYSIS_CRS,
+        "transform": transform,
+        "nodata": OUTPUT_NODATA,
+        "compress": "deflate",
+        "tiled": True,
+        "blockxsize": 256,
+        "blockysize": 256,
+        "BIGTIFF": "IF_SAFER",
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with rasterio.open(output_path, "w", **profile) as destination:
+        for index, name in enumerate(RAW_TILE_BANDS, start=1):
+            destination.set_band_description(index, name)
+        for item in completed:
+            tile = item.tile
+            col_off = int(round((tile.xmin - xmin) / scale))
+            row_off = int(round((ymax - tile.ymax) / scale))
+            with rasterio.open(item.path) as source:
+                data = source.read(masked=True).filled(OUTPUT_NODATA)
+            destination.write(
+                data.astype(np.float32, copy=False),
+                window=Window(col_off, row_off, tile.width_px, tile.height_px),
+            )
+    return output_path
+
+
+def _download_native_modis(
+    period_start: str,
+    support_bounds: tuple[float, float, float, float],
+    timeout_seconds: int,
+):
+    geometry = ee.Geometry.Rectangle(
+        list(support_bounds),
+        proj=ANALYSIS_CRS,
+        geodesic=False,
+    )
+    context = build_modis_period_context(period_start, geometry)
+    projection_info = context["modis_projection"].getInfo()
+    grid = build_native_modis_grid(
+        projection_info=projection_info,
+        processing_bounds=support_bounds,
+    )
+    height, width = grid.shape
+    image = context["modis_et"].rename("ET_MODIS_mm_period").toFloat()
+    parameters = {
+        "bands": ["ET_MODIS_mm_period"],
+        "crs": grid.earth_engine_crs,
+        "crs_transform": [
+            grid.transform.a,
+            grid.transform.b,
+            grid.transform.c,
+            grid.transform.d,
+            grid.transform.e,
+            grid.transform.f,
+        ],
+        "dimensions": [width, height],
+        "format": "GEO_TIFF",
+    }
+    payload = download_ee_bytes(image, parameters, timeout_seconds)
+    bands, downloaded_transform, downloaded_crs = read_downloaded_array(payload)
+    if bands.shape != (1, height, width):
+        raise RuntimeError("Downloaded MODIS ET grid has unexpected shape.")
+    if downloaded_crs is None:
+        raise RuntimeError("Downloaded MODIS ET has no CRS.")
+    if not downloaded_transform.almost_equals(grid.transform):
+        raise RuntimeError("Downloaded MODIS transform differs from requested native grid.")
+    return bands[0].filled(np.nan).astype(np.float64), grid
+
+
+def _write_native_modis_basin_raster(
+    project_root: Path,
+    period_start: str,
+    modis_et: np.ndarray,
+    modis_grid,
+    output_directory: Path,
+) -> dict[str, object]:
+    """Write native-grid MODIS ET cells intersecting the basin.
+
+    Values remain on the native MODIS sinusoidal grid. The basin is used only
+    as a spatial mask; no spatial resampling is performed. Boundary cells are
+    retained when their native footprint intersects the basin.
+    """
+    basin_geometry = _analysis_geometry(project_root)
+    basin_native = transform_geom(
+        ANALYSIS_CRS,
+        modis_grid.local_crs,
+        basin_geometry,
+        precision=15,
+    )
+    basin_mask = rasterize(
+        [(basin_native, 1)],
+        out_shape=modis_et.shape,
+        transform=modis_grid.transform,
+        fill=0,
+        all_touched=True,
+        dtype="uint8",
+    ).astype(bool)
+    if not np.any(basin_mask):
+        raise RuntimeError("Basin does not intersect the downloaded native MODIS grid.")
+
+    rows, columns = np.where(basin_mask)
+    row0 = int(rows.min())
+    row1 = int(rows.max()) + 1
+    col0 = int(columns.min())
+    col1 = int(columns.max()) + 1
+    window = Window(col0, row0, col1 - col0, row1 - row0)
+    cropped_transform = rasterio.windows.transform(window, modis_grid.transform)
+
+    cropped_et = np.asarray(modis_et[row0:row1, col0:col1], dtype=np.float64)
+    cropped_mask = basin_mask[row0:row1, col0:col1]
+    output = np.where(cropped_mask, cropped_et, np.nan)
+
+    output_directory = Path(output_directory)
+    output_directory.mkdir(parents=True, exist_ok=True)
+    raster_path = output_directory / f"MODIS_ET_{period_start}_native.tif"
+    metadata_path = output_directory / f"production_metadata_MODIS_ET_{period_start}_native.json"
+
+    profile = {
+        "driver": "GTiff",
+        "width": output.shape[1],
+        "height": output.shape[0],
+        "count": 1,
+        "dtype": "float32",
+        "crs": modis_grid.local_crs,
+        "transform": cropped_transform,
+        "nodata": OUTPUT_NODATA,
+        "compress": "deflate",
+        "tiled": True,
+        "BIGTIFF": "IF_SAFER",
+    }
+    prepared = np.where(np.isfinite(output), output, OUTPUT_NODATA).astype(np.float32)
+    with rasterio.open(raster_path, "w", **profile) as destination:
+        destination.write(prepared, 1)
+        destination.set_band_description(1, "ET_MODIS_mm_period")
+        destination.update_tags(
+            period_start=period_start,
+            source_product="MOD16A2GF v6.1",
+            nominal_resolution_m="500",
+            grid_role="native_modis_coarse_product",
+            basin_mask_rule="native_cells_intersecting_basin_all_touched",
+            resampling="none",
+        )
+
+    valid_values = output[np.isfinite(output)]
+    metadata = {
+        "period_start": period_start,
+        "source_product": "MOD16A2GF v6.1",
+        "band": "ET_MODIS_mm_period",
+        "units": "mm_per_modis_period",
+        "nominal_resolution_m": 500,
+        "native_grid_preserved": True,
+        "native_pixel_size_x_m": float(abs(cropped_transform.a)),
+        "native_pixel_size_y_m": float(abs(cropped_transform.e)),
+        "basin_mask_rule": "retain native MODIS cells intersecting basin (all_touched=True)",
+        "spatial_resampling": "none",
+        "valid_basin_cells": int(valid_values.size),
+        "raster": str(raster_path),
+    }
+    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    return {
+        "raster": raster_path,
+        "metadata": metadata_path,
+        "metadata_values": metadata,
+    }
+
+
+def download_native_modis_basin(
+    project_root: Path,
+    period_start: str,
+    timeout_seconds: int = 600,
+) -> dict[str, object]:
+    """Download only the native-grid MODIS ET basin product for one period."""
+    project_root = Path(project_root).resolve()
+    workspace = get_workspace_paths(project_root).ensure()
+    basin_geometry = _analysis_geometry(project_root)
+    modis_et, modis_grid = _download_native_modis(
+        period_start=period_start,
+        support_bounds=tuple(float(value) for value in geometry_bounds(basin_geometry)),
+        timeout_seconds=timeout_seconds,
+    )
+    return _write_native_modis_basin_raster(
+        project_root=project_root,
+        period_start=period_start,
+        modis_et=modis_et,
+        modis_grid=modis_grid,
+        output_directory=workspace.root / "rasters_modis" / period_start,
+    )
+
+
+def _fine_diagnostics(edges, result, fine_size: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    coarse = np.asarray(edges.coarse_index, dtype=np.int64)
+    fine = np.asarray(edges.fine_index, dtype=np.int64)
+    area = np.asarray(edges.overlap_area_m2, dtype=float)
+
+    usable_fraction_coarse = result.usable_fraction.ravel()
+    eligible = result.eligible_coarse_mask.ravel()
+
+    minimum_support = np.full(fine_size, np.inf, dtype=np.float64)
+    finite_support_edge = np.isfinite(usable_fraction_coarse[coarse])
+    np.minimum.at(
+        minimum_support,
+        fine[finite_support_edge],
+        usable_fraction_coarse[coarse[finite_support_edge]],
+    )
+    minimum_support[~np.isfinite(minimum_support)] = np.nan
+
+    touched = np.bincount(fine, minlength=fine_size) > 0
+    bad = np.bincount(
+        fine,
+        weights=(~eligible[coarse]).astype(np.int32),
+        minlength=fine_size,
+    ) > 0
+    all_eligible = touched & ~bad
+
+    coarse_error = np.full(eligible.size, np.nan, dtype=np.float64)
+    coarse_error[result.eligible_coarse] = result.final_error_after_nonnegative
+    absolute_error = np.abs(coarse_error)
+    maximum_error = np.full(fine_size, -np.inf, dtype=np.float64)
+    finite_error_edge = np.isfinite(absolute_error[coarse])
+    np.maximum.at(
+        maximum_error,
+        fine[finite_error_edge],
+        absolute_error[coarse[finite_error_edge]],
+    )
+    maximum_error[~np.isfinite(maximum_error)] = np.nan
+
+    return minimum_support, all_eligible.astype(np.float64), maximum_error
+
+
+def _crop_window(
+    support_transform: Affine,
+    target_bounds: tuple[float, float, float, float],
+) -> Window:
+    xmin, ymin, xmax, ymax = target_bounds
+    scale = float(PREDICTION_SCALE_M)
+    col_off = int(round((xmin - support_transform.c) / scale))
+    row_off = int(round((support_transform.f - ymax) / scale))
+    width = int(round((xmax - xmin) / scale))
+    height = int(round((ymax - ymin) / scale))
+    return Window(col_off, row_off, width, height)
+
+
+def _write_final_raster(
+    path: Path,
+    arrays: list[np.ndarray],
+    transform: Affine,
+) -> None:
+    height, width = arrays[0].shape
+    profile = {
+        "driver": "GTiff",
+        "width": width,
+        "height": height,
+        "count": len(OUTPUT_BANDS),
+        "dtype": "float32",
+        "crs": ANALYSIS_CRS,
+        "transform": transform,
+        "nodata": OUTPUT_NODATA,
+        "compress": "deflate",
+        "tiled": True,
+        "blockxsize": 256,
+        "blockysize": 256,
+        "BIGTIFF": "IF_SAFER",
+    }
+    prepared = np.stack(arrays, axis=0)
+    prepared = np.where(np.isfinite(prepared), prepared, OUTPUT_NODATA).astype(np.float32)
+    with rasterio.open(path, "w", **profile) as destination:
+        destination.write(prepared)
+        for index, name in enumerate(OUTPUT_BANDS, start=1):
+            destination.set_band_description(index, name)
+
+
+def _reconcile_raw_mosaic(
+    project_root: Path,
+    period_start: str,
+    raw_mosaic_path: Path,
+    final_path: Path,
+    basin_grid_bounds: tuple[float, float, float, float],
+    timeout_seconds: int,
+) -> dict[str, object]:
+    with rasterio.open(raw_mosaic_path) as dataset:
+        if tuple(dataset.descriptions) != tuple(RAW_TILE_BANDS):
+            raise RuntimeError("Raw support mosaic band contract mismatch.")
+        raw = dataset.read(masked=True).filled(np.nan).astype(np.float64)
+        support_transform = dataset.transform
+        support_crs = dataset.crs
+        support_bounds = (
+            dataset.bounds.left,
+            dataset.bounds.bottom,
+            dataset.bounds.right,
+            dataset.bounds.top,
+        )
+        fine_shape = (dataset.height, dataset.width)
+
+    if support_crs is None or support_crs.to_string() != ANALYSIS_CRS:
+        raise RuntimeError("Raw support mosaic CRS mismatch.")
+
+    kc_raw = raw[RAW_TILE_BANDS.index("Kc_raw")]
+    dissimilarity = raw[RAW_TILE_BANDS.index("dissimilarity_index")]
+    local_point_density = raw[RAW_TILE_BANDS.index("local_point_density")]
+    stack_valid = raw[RAW_TILE_BANDS.index("stack_valid")] > 0.5
+    aoa_inside = raw[RAW_TILE_BANDS.index("AOA_inside")] > 0.5
+    usable = raw[RAW_TILE_BANDS.index("usable")] > 0.5
+    domain = raw[RAW_TILE_BANDS.index("support_domain")] > 0.5
+
+    modis_et, modis_grid = _download_native_modis(
+        period_start=period_start,
+        support_bounds=support_bounds,
+        timeout_seconds=timeout_seconds,
+    )
+    workspace = get_workspace_paths(project_root).ensure()
+    modis_product = _write_native_modis_basin_raster(
+        project_root=project_root,
+        period_start=period_start,
+        modis_et=modis_et,
+        modis_grid=modis_grid,
+        output_directory=workspace.root / "rasters_modis" / period_start,
+    )
+    print("Building global exact-overlap operator...")
+    edges = build_overlap_edges(
+        domain=domain,
+        fine_transform=support_transform,
+        fine_crs=support_crs,
+        modis_et=modis_et,
+        modis_transform=modis_grid.transform,
+        modis_crs=modis_grid.local_crs,
+        progress_every=1000,
+    )
+    print("Solving one global exact-overlap reconciliation...")
+    result = solve_overlap_reconciliation(
+        kc_raw=kc_raw,
+        usable=usable,
+        modis_et=modis_et,
+        edges=edges,
+        usable_support_fraction=RF25_USABLE_SUPPORT_FRACTION,
+        tolerance_mm=RF25_RECONCILIATION_TOLERANCE_MM,
+    )
+
+    et_support = materialize_active_values(
+        fine_shape=fine_shape,
+        active_fine=result.active_fine,
+        values=result.et_final_nonnegative,
+        selected_active=result.publishable_active,
+    )
+    minimum_support, all_eligible, maximum_error = _fine_diagnostics(
+        edges=edges,
+        result=result,
+        fine_size=kc_raw.size,
+    )
+    minimum_support = minimum_support.reshape(fine_shape)
+    all_eligible = all_eligible.reshape(fine_shape)
+    maximum_error = maximum_error.reshape(fine_shape)
+
+    crop = _crop_window(support_transform, basin_grid_bounds)
+    rs = slice(int(crop.row_off), int(crop.row_off + crop.height))
+    cs = slice(int(crop.col_off), int(crop.col_off + crop.width))
+    final_transform = from_origin(
+        basin_grid_bounds[0],
+        basin_grid_bounds[3],
+        PREDICTION_SCALE_M,
+        PREDICTION_SCALE_M,
+    )
+
+    basin_geometry = _analysis_geometry(project_root)
+    basin_mask = rasterize(
+        [(basin_geometry, 1)],
+        out_shape=(int(crop.height), int(crop.width)),
+        transform=final_transform,
+        fill=0,
+        all_touched=False,
+        dtype="uint8",
+    ).astype(bool)
+
+    source_arrays = [
+        et_support,
+        kc_raw,
+        dissimilarity,
+        local_point_density,
+        stack_valid.astype(np.float64),
+        aoa_inside.astype(np.float64),
+        usable.astype(np.float64),
+        minimum_support,
+        all_eligible,
+        maximum_error,
+    ]
+    final_arrays = []
+    for array in source_arrays:
+        cropped = np.asarray(array[rs, cs], dtype=np.float64)
+        final_arrays.append(np.where(basin_mask, cropped, np.nan))
+
+    published = final_arrays[0][np.isfinite(final_arrays[0])]
+    if published.size and np.any(published < 0):
+        raise RuntimeError("Negative ET reached final published raster.")
+
+    final_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_final_raster(final_path, final_arrays, final_transform)
+
+    adjustment = result.et_final_nonnegative - result.et_initial
+    finite_pair = np.isfinite(result.et_initial) & np.isfinite(result.et_final_nonnegative)
+    if int(finite_pair.sum()) > 1:
+        correlation = float(
+            np.corrcoef(
+                result.et_initial[finite_pair],
+                result.et_final_nonnegative[finite_pair],
+            )[0, 1]
+        )
+    else:
+        correlation = float("nan")
+
+    return {
+        "eligible_modis_parents": int(result.eligible_coarse.size),
+        "active_fine_cells": int(result.active_fine.size),
+        "publishable_active_cells_support": int(result.publishable_active.sum()),
+        "publishable_active_fraction_of_active_support": (
+            float(result.publishable_active.sum() / result.active_fine.size)
+            if result.active_fine.size
+            else float("nan")
+        ),
+        "published_basin_pixels": int(published.size),
+        "negative_active_before_floor": int(result.negative_active_cells),
+        "negative_publishable_before_floor": int(result.negative_publishable_cells),
+        "max_abs_conservation_error_before_floor_mm": float(result.max_abs_final_error_mm),
+        "max_abs_conservation_error_after_floor_mm": float(result.max_abs_error_after_nonnegative_mm),
+        "mae_adjustment_mm": float(np.mean(np.abs(adjustment))),
+        "rmse_adjustment_mm": float(np.sqrt(np.mean(adjustment ** 2))),
+        "pearson_final_vs_initial": correlation,
+        "modis_raster": str(modis_product["raster"]),
+        "modis_metadata": str(modis_product["metadata"]),
+    }
+
+
+def download_rf25_basin(
+    project_root: Path,
+    period_start: str,
+    model,
+    aoa_parameters,
+    tile_size_m: int = 4000,
+    min_tile_size_m: int = 500,
+) -> dict[str, object]:
+    """Produce the final 20 m basin raster using global exact overlaps."""
+    project_root = Path(project_root).resolve()
+    workspace = get_workspace_paths(project_root).ensure()
+    period_directory = workspace.rasters / period_start
+    period_directory.mkdir(parents=True, exist_ok=True)
+
+    support_tiles, support_bounds, basin_grid_bounds = _support_tiles(
+        project_root=project_root,
+        tile_size_m=tile_size_m,
+    )
+    tile_directory = period_directory / (
+        "tiles_" + RF25_EXACT_OVERLAP_PRODUCTION_VERSION
+    )
+    scientific_signature = build_production_scientific_signature(
+        model,
+        aoa_parameters,
+    )
+
+    completed: list[CompletedTile] = []
+    for index, tile in enumerate(support_tiles, start=1):
+        print(
+            f"[{index}/{len(support_tiles)}] {tile.tile_id} "
+            f"({int(tile.width_m)} m raw support core)"
+        )
+        completed.append(
+            _download_raw_tile(
+                period_start=period_start,
+                model=model,
+                aoa_parameters=aoa_parameters,
+                tile=tile,
+                tile_directory=tile_directory,
+                timeout_seconds=600,
+                scientific_signature=scientific_signature,
+            )
+        )
+
+    manifest_path = period_directory / (
+        "tile_manifest_" + RF25_EXACT_OVERLAP_PRODUCTION_VERSION + ".csv"
+    )
+    _write_manifest(completed, manifest_path)
+
+    raw_mosaic_path = period_directory / (
+        "raw_support_" + RF25_EXACT_OVERLAP_PRODUCTION_VERSION + f"_{period_start}_20m.tif"
+    )
+    _mosaic_raw_tiles(completed, raw_mosaic_path, support_bounds)
+
+    raster_path = period_directory / (
+        "ET_" + RF25_EXACT_OVERLAP_PRODUCTION_VERSION + f"_{period_start}_20m.tif"
+    )
+    reconciliation = _reconcile_raw_mosaic(
+        project_root=project_root,
+        period_start=period_start,
+        raw_mosaic_path=raw_mosaic_path,
+        final_path=raster_path,
+        basin_grid_bounds=basin_grid_bounds,
+        timeout_seconds=600,
+    )
+
+    metadata = {
+        "period_start": period_start,
+        "production_method_version": RF25_EXACT_OVERLAP_PRODUCTION_VERSION,
+        "scientific_signature": scientific_signature,
+        "analysis_crs": ANALYSIS_CRS,
+        "prediction_scale_m": PREDICTION_SCALE_M,
+        "tile_size_m": _normalize_tile_size(tile_size_m),
+        "minimum_tile_size_m": _normalize_tile_size(min_tile_size_m),
+        "support_halo_rule": "one_or_more_full_tile_rings_covering_at_least_1000_m",
+        "support_tile_count": len(support_tiles),
+        "output_bands": OUTPUT_BANDS,
+        "usable_support_fraction": RF25_USABLE_SUPPORT_FRACTION,
+        "conservation_tolerance_mm": RF25_RECONCILIATION_TOLERANCE_MM,
+        "conservation_scope": CONSERVATION_SCOPE,
+        "published_raster_conservation": PUBLISHED_RASTER_CONSERVATION,
+        "applicability_rule": "complete_stack AND weighted_RF_AOA_inside AND Kc_raw >= 0",
+        "aoa_method": "RF permutation-importance weighted L2 DI; spatial-CV threshold; LPD diagnostic",
+        "reconciliation": "single_global_exact_overlap_after_raw_mosaic",
+        "negative_et_rule": "floor_once_to_zero_then_fail_if_conservation_exceeds_tolerance",
+        "google_drive_used": False,
+        "earth_engine_asset_created": False,
+        "model_source": "fitted_in_current_run",
+        "raw_support_mosaic": str(raw_mosaic_path),
+        "raster": str(raster_path),
+        "tile_manifest": str(manifest_path),
+        **reconciliation,
+    }
+    metadata_path = period_directory / (
+        "production_metadata_" + RF25_EXACT_OVERLAP_PRODUCTION_VERSION + ".json"
+    )
+    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+
+    return {
+        "raster": raster_path,
+        "manifest": manifest_path,
+        "metadata": metadata_path,
+        "modis_raster": Path(reconciliation["modis_raster"]),
+        "modis_metadata": Path(reconciliation["modis_metadata"]),
+        "completed_tiles": completed,
+        "support_tiles": support_tiles,
+        "raw_support_mosaic": raw_mosaic_path,
+    }

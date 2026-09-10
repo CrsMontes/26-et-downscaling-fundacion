@@ -1,4 +1,4 @@
-"""Explicit Virtual Station paths and read-only checks of the frozen V5 run."""
+"""Virtual Station support-selection paths and validation helpers."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def resolve_virtual_workspace(value=None, repository_root=None) -> Path:
         path = Path(override).expanduser().resolve()
         return path.parent if path.name.lower() == "current" else path
     root = Path(repository_root) if repository_root else Path(__file__).resolve().parents[2]
-    return root.parent / "ET_fundacion_workspace_virtual_station"
+    return root / "outputs"
 
 
 def resolve_reference_workspace(value) -> Path:

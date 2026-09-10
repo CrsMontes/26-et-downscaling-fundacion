@@ -1,9 +1,10 @@
-"""External workspace paths for ET Fundacion.
+"""Repository-local generated-data workspace for ET Fundación.
 
-Generated data are stored outside the Git repository. The repository contains
-only source code, documentation, tests, and the three canonical portable inputs.
-
-Set ET_FUNDACION_WORKSPACE to override the default sibling workspace directory.
+All generated data are written below ``outputs/`` in this repository and are
+ignored by Git. The three portable scientific inputs remain tracked under
+``data/``. ``ET_FUNDACION_WORKSPACE`` can still override the operational
+``outputs/current`` path for advanced use, but the default is intentionally
+self-contained.
 """
 
 from __future__ import annotations
@@ -25,6 +26,9 @@ class WorkspacePaths:
     diagnostics: Path
     rasters: Path
     archive: Path
+    models: Path
+    figures: Path
+    logs: Path
 
     def ensure(self) -> "WorkspacePaths":
         for path in (
@@ -35,21 +39,23 @@ class WorkspacePaths:
             self.diagnostics,
             self.rasters,
             self.archive,
+            self.models,
+            self.figures,
+            self.logs,
         ):
             path.mkdir(parents=True, exist_ok=True)
         return self
 
 
 def get_workspace_paths(project_root: Path) -> WorkspacePaths:
-    """Return the external workspace used by the current repository."""
+    """Return the operational workspace, repository-local by default."""
     project_root = Path(project_root).resolve()
     override = os.environ.get(WORKSPACE_ENV_VAR, "").strip()
-
-    if override:
-        root = Path(override).expanduser().resolve()
-    else:
-        root = project_root.parent / "ET_fundacion_workspace" / "current"
-
+    root = (
+        Path(override).expanduser().resolve()
+        if override
+        else project_root / "outputs" / "current"
+    )
     return WorkspacePaths(
         root=root,
         raw_cache=root / "raw",
@@ -58,6 +64,9 @@ def get_workspace_paths(project_root: Path) -> WorkspacePaths:
         diagnostics=root / "diagnostics",
         rasters=root / "rasters",
         archive=root / "archive",
+        models=root / "models",
+        figures=root / "figures",
+        logs=root / "logs",
     )
 
 

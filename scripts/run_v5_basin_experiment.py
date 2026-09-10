@@ -82,6 +82,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Rebuild completed experimental extraction checkpoints.",
     )
+    parser.add_argument(
+        "--extract-only",
+        action="store_true",
+        help=(
+            "Stop after rebuilding the Virtual10 GE90 training population. "
+            "The final RF model is trained separately by train_rf25.py."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1430,6 +1438,37 @@ def main() -> None:
         raise RuntimeError(
             "V5 GE90 population does not retain 10 distinct fixed UTM blocks."
         )
+
+    if args.extract_only:
+        output_path = results_root / "virtual10_training_population.csv"
+        virtual_population.to_csv(output_path, index=False)
+        extraction_metadata = {
+            "experiment": EXPERIMENT_NAME,
+            "stage": "training_population_only",
+            "analysis_start": args.start_date,
+            "analysis_end_exclusive": args.end_date_exclusive,
+            "training_design": "10 whole-basin virtual MODIS footprints selected by sequential random GE90 rejection",
+            "canonical_support_reconstruction": True,
+            "frozen_GE90_period_whitelist_used_for_extraction": True,
+            "real_station_footprints_used_for_training": False,
+            "virtual_support_ids": virtual_ids,
+            "virtual_modis_pixel_ids": modis_ids,
+            "virtual_spatial_blocks": sorted(virtual_population["spatial_block"].astype(str).unique()),
+            "virtual_spatial_block_definition": "fixed EPSG:32618 10 km grid; floor(easting/10000)_floor(northing/10000)",
+            "target_definition": "Kc_target = MODIS_ET / ETo",
+            "final_predictor_count": 25,
+            "final_model": "RandomForestRegressor trained separately",
+            "google_drive_used": False,
+            "interpretation_guardrail": "Training target is MODIS-derived Kc; this is not independent 20 m ET validation.",
+        }
+        (results_root / "training_population_metadata.json").write_text(
+            json.dumps(extraction_metadata, indent=2), encoding="utf-8"
+        )
+        print("Virtual10 training population:", output_path)
+        print("Rows:", len(virtual_population))
+        print("Supports:", virtual_population["station_id"].nunique())
+        print("Spatial blocks:", virtual_population["spatial_block"].nunique())
+        return
 
     stable_blocks = set(
         stable_population["spatial_block"].astype(str).unique() if stable_population is not None else []

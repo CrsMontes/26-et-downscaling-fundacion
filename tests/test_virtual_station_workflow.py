@@ -16,7 +16,7 @@ def test_virtual_workspace_default_is_separate(tmp_path):
     repo = tmp_path / "26-et-downscaling-fundacion-virtual-station"
     repo.mkdir()
     resolved = resolve_virtual_workspace(repository_root=repo)
-    assert resolved == tmp_path / "ET_fundacion_workspace_virtual_station"
+    assert resolved == repo / "outputs"
 
 
 def test_virtual_resolver_does_not_use_old_generic_environment(monkeypatch, tmp_path):
@@ -25,7 +25,7 @@ def test_virtual_resolver_does_not_use_old_generic_environment(monkeypatch, tmp_
     monkeypatch.setenv("ET_FUNDACION_WORKSPACE", str(tmp_path / "old_mixed"))
     monkeypatch.delenv("ET_FUNDACION_VIRTUAL_WORKSPACE", raising=False)
     resolved = resolve_virtual_workspace(repository_root=repo)
-    assert resolved == tmp_path / "ET_fundacion_workspace_virtual_station"
+    assert resolved == repo / "outputs"
 
 
 def test_run_pipeline_is_non_destructive_by_default():
@@ -35,4 +35,5 @@ def test_run_pipeline_is_non_destructive_by_default():
     assert "if args.command is None:" in source
     assert "parser.print_help()" in source
     assert "download_ridge25_basin" not in source
+    assert "produce_rf25_rasters.py" in source
     assert "ee.Initialize" not in source
