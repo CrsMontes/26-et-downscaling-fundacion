@@ -115,8 +115,8 @@ def main() -> None:
     )
 
     # Local row-preserving assembly; no feature selection or model fitting.
-    run("scripts/candidates/build_meteorology_candidates.py")
     run("scripts/candidates/build_optical_candidates.py")
+    run("scripts/candidates/build_meteorology_candidates.py")
     run("scripts/candidates/build_candidate_feature_store.py")
     run("scripts/candidates/build_candidate_master.py")
 
