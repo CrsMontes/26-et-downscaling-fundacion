@@ -13,7 +13,7 @@ from et_downscaling.rf25_overlap_production import download_rf25_basin
 from et_downscaling.workspace import get_workspace_paths, require_portable_inputs
 
 
-DEFAULT_DATES = ["2020-03-13", "2021-11-25", "2022-03-30"]
+DEFAULT_DATES = ["2020-03-13", "2022-10-24", "2022-03-30"]
 
 
 def project_root() -> Path:

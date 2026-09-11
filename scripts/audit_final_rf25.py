@@ -1,4 +1,4 @@
-﻿"""Final local scientific audit for the frozen RF-25 workflow.
+"""Final local scientific audit for the frozen RF-25 workflow.
 
 The audit performs no Earth Engine access and no data download. It compares
 RF-25 with Ridge-25 and a fold-specific training-mean baseline on exactly the

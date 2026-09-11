@@ -10,7 +10,7 @@ available as Git branches:
 - `field`: historical Field Station workflow.
 - `diagnostic`: original diagnostic-reproduction state.
 
-The repository was intentionally disconnected from the old Git remote. Add a
+Repository remote: `origin` is configured for GitHub synchronization.
 new `origin` only after creating the new GitHub repository.
 
 ## Final scientific configuration
@@ -32,7 +32,7 @@ new `origin` only after creating the new GitHub repository.
   as a diagnostic layer, not a second mask.
 - Coarse MODIS ET is preserved by exact-overlap reconciliation on the full
   reconciled support before the final publication mask.
-- Final map dates: 2020-03-13, 2021-11-25 and 2022-03-30.
+- Final map dates: 2020-03-13, 2022-10-24 and 2022-03-30.
 
 Virtual supports and MODIS-derived targets are not independent 20 m ET
 validation. Field comparisons use a derived field ET proxy and are reported as
