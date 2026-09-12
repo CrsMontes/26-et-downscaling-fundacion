@@ -35,3 +35,6 @@ Thumbs.db
 
 # Archived field source and reconstruction files
 data/field/archive/
+
+# Local analysis notebooks
+notebooks/
