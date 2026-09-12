@@ -2,9 +2,10 @@
 
 The audit performs no Earth Engine access and no data download. It compares
 RF-25 with Ridge-25 and a fold-specific training-mean baseline on exactly the
-same final population, verifies exact OOF population identity, evaluates fold
+same final population, verifies exact OOF keys/groups and target agreement at
+``atol=1e-12``, evaluates fold
 stability and random-state sensitivity, quantifies spatial uncertainty with a
-cluster bootstrap, summarizes monthly RF25 population retention and the
+cluster bootstrap, summarizes monthly RF25 population inclusion and the
 RF-weighted AOA, and audits the three selected production rasters.
 """
 
@@ -47,9 +48,10 @@ AOA_MODEL = (
 )
 MASTER = (
     OUTPUTS
-    / "training"
+    / "current"
     / "master"
-    / "virtual10_all_predictors_2020_2024.parquet"
+    / "S2"
+    / "ET_S2_S1_METEO_KC_FOOTPRINT_2020_2024.csv"
 )
 
 EXPECTED_POPULATION_ROWS = 1526
@@ -412,8 +414,8 @@ def validate_rf_oof(
     )
 
     print(
-        f"{evaluation_name}: exact OOF identity PASS | "
-        f"rows={len(table)}"
+        f"{evaluation_name}: OOF population agreement PASS | "
+        f"rows={len(table)} | exact keys/groups | target atol=1e-12"
     )
 
 
@@ -1182,16 +1184,16 @@ print(
 
 
 # ------------------------------------------------------------------
-# 5. RF25 population retention by month
+# 5. RF25 population inclusion by month
 # ------------------------------------------------------------------
 
 print(
-    "\n[5/7] RF25 population retention by month..."
+    "\n[5/7] RF25 population inclusion by month..."
 )
 
-master = pd.read_parquet(
+master = pd.read_csv(
     MASTER,
-    columns=[
+    usecols=[
         "station_id",
         "period_start",
     ],
@@ -1230,7 +1232,7 @@ master_supports = set(
 
 if master_supports != population_supports:
     raise RuntimeError(
-        "Candidate master and RF25 population "
+        "RF25 source master and population "
         "do not contain the same Virtual10 supports."
     )
 
@@ -1241,7 +1243,7 @@ if master.duplicated(
     ]
 ).any():
     raise RuntimeError(
-        "Candidate master contains duplicate "
+        "RF25 source master contains duplicate "
         "station_id x period_start rows."
     )
 
@@ -1270,7 +1272,7 @@ master_rows = (
     )
     .size()
     .rename(
-        "candidate_master_rows"
+        "source_support_period_rows"
     )
 )
 
@@ -1293,37 +1295,37 @@ monthly = pd.concat(
 ).fillna(0).reset_index()
 
 monthly[
-    "retention_pct"
+    "inclusion_pct"
 ] = (
     monthly[
         "rf25_population_rows"
     ]
     / monthly[
-        "candidate_master_rows"
+        "source_support_period_rows"
     ]
     * 100
 )
 
 monthly.to_csv(
     AUDIT
-    / "rf25_population_retention_by_month.csv",
+    / "rf25_population_inclusion_by_month.csv",
     index=False,
 )
 
 print(monthly.to_string(index=False))
 
 print(
-    "\nMonthly RF25 population retention range: "
-    f"{monthly['retention_pct'].min():.2f}% - "
-    f"{monthly['retention_pct'].max():.2f}%"
+    "\nMonthly RF25 population inclusion range: "
+    f"{monthly['inclusion_pct'].min():.2f}% - "
+    f"{monthly['inclusion_pct'].max():.2f}%"
 )
 
 print(
-    "Interpretation: this is monthly retention "
-    "of the final RF25 population relative to the "
-    "Virtual10 candidate master. It is not an "
-    "independent climatology of Sentinel-2 GE90 "
-    "availability."
+    "Interpretation: this is the share of all Virtual10 source support-period "
+    "rows included after the complete RF25 eligibility contract (MODIS QC, "
+    "target completeness, Sentinel-2 GE90 and finite accepted predictors). "
+    "It does not isolate Sentinel-2 availability and is not a climatological "
+    "analysis."
 )
 
 
@@ -1412,7 +1414,7 @@ print("\n[7/7] Three-date raster QC...")
 
 dates = [
     "2020-03-13",
-    "2022-10-24",
+    "2024-07-11",
     "2022-03-30",
 ]
 
@@ -1499,6 +1501,7 @@ for date in dates:
         usable_cells = 0
         published_cells = 0
 
+        nonfinite_published = 0
         negative_published = 0
         negative_kc_stack = 0
         negative_kc_aoa = 0
@@ -1587,6 +1590,13 @@ for date in dates:
                 et_valid.sum()
             )
 
+            nonfinite_published += int(
+                (
+                    et_valid
+                    & ~np.isfinite(et.data)
+                ).sum()
+            )
+
             negative_published += int(
                 (
                     et_valid
@@ -1651,6 +1661,9 @@ for date in dates:
             ),
             "negative_published_et": (
                 negative_published
+            ),
+            "nonfinite_published_et": (
+                nonfinite_published
             ),
             "negative_kc_stack": (
                 negative_kc_stack
@@ -1727,6 +1740,22 @@ print(
         ].sum()
     ),
 )
+
+nonfinite_total = int(
+    raster_qc[
+        "nonfinite_published_et"
+    ].sum()
+)
+
+print(
+    "Non-finite ET in published rasters:",
+    nonfinite_total,
+)
+
+if nonfinite_total:
+    raise RuntimeError(
+        "Published ET rasters contain non-finite unmasked pixels."
+    )
 
 print(
     "Audit outputs:",

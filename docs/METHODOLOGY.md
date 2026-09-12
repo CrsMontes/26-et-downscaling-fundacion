@@ -25,7 +25,7 @@ The main estimator is `RandomForestRegressor` with a frozen 25-predictor feature
 - `bootstrap = True`
 - `random_state = 42`
 
-No hyperparameter tuning or feature search occurs in the final training command. Before fitting, all implemented candidate predictor families are materialized on the same 10 Virtual10 supports and preserved in a complete master. RF-25 then selects only the frozen 25 columns; missingness in unused candidates is never an RF eligibility gate.
+No hyperparameter tuning or feature search occurs in the final training command. The canonical extraction materializes Sentinel-2, MODIS target support and ERA5-Land on the same 10 Virtual10 supports. RF-25 then applies only the frozen 25-column and GE90 population contract. Historical candidate families can be materialized separately and are never RF-25 eligibility gates.
 
 The 25 model predictors are 16 Sentinel-2 optical variables, five ERA5-Land variables and four seasonal harmonics. See `docs/PREDICTOR_CATALOG.md`.
 
@@ -67,10 +67,12 @@ Field-derived ET is reserved for external comparison and is not used to fit Virt
 
 ## Data and output policy
 
-The only tracked portable scientific inputs are:
+The tracked portable inputs required by RF-25 are:
 
 - `data/boundaries/fundacion_basin.geojson`
 - `data/stations/fundacion_stations.geojson`
-- `data/field/field_etgage.csv`
+
+`data/field/field_etgage.csv` is tracked for the separate field-proxy comparison
+but is not required to select, train, audit or produce RF-25.
 
 All generated data are written below `outputs/` inside the repository. Generated outputs are ignored by Git and must not be uploaded to GitHub. Google Drive is not used by the workflow.

@@ -1,9 +1,9 @@
-"""Materialize every implemented 2020-2024 predictor family on Virtual10.
+"""Materialize the historical/experimental predictor archive on Virtual10.
 
 The ten selected virtual MODIS supports are the only sampling supports used by
-this archive.  All implemented candidate families are preserved for audit and
-future work, while the final RF model remains frozen to the accepted 25
-predictors.  Real field stations are not used for model training or candidate
+this archive. All implemented candidate families are preserved for audit and
+future controlled experiments. This command is separate from canonical RF-25
+extraction. Real field stations are not used for model training or candidate
 materialization.
 """
 
@@ -43,7 +43,8 @@ def configure_virtual_supports() -> Path:
     if not points.is_file():
         raise FileNotFoundError(
             f"Virtual10 points not found: {points}\n"
-            "Run `python scripts/run_pipeline.py select --project <PROJECT>` first."
+            "Run `python scripts/run_pipeline.py select --project "
+            "<earth-engine-project>` first."
         )
     os.environ["ET_STATIONS_GEOJSON"] = str(points.resolve())
     os.environ["ET_CANDIDATE_SUPPORT_COUNT"] = str(VIRTUAL_SUPPORT_COUNT)

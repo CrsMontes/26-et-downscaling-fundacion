@@ -1,18 +1,19 @@
 # Data
 
-This directory contains the local inputs required by the ET downscaling
-workflow.
+This directory contains the tracked local inputs for the ET downscaling
+workflow and its separate field comparison.
 
 ## Active inputs
 
 - `boundaries/fundacion_basin.geojson`  
-  Fundaci?n River Basin boundary.
+  Fundación River Basin boundary.
 
 - `stations/fundacion_stations.geojson`  
   Station geometry, stable station identifiers, and station-level metadata.
 
 - `field/field_etgage.csv`  
-  Curated daily ETgage observations.
+  Curated daily ETgage observations for separate field-proxy validation. This
+  file is not required by the canonical RF-25 pipeline.
 
 ## Stations
 

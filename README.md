@@ -11,7 +11,6 @@ available as Git branches:
 - `diagnostic`: original diagnostic-reproduction state.
 
 Repository remote: `origin` is configured for GitHub synchronization.
-new `origin` only after creating the new GitHub repository.
 
 ## Final scientific configuration
 
@@ -32,7 +31,8 @@ new `origin` only after creating the new GitHub repository.
   as a diagnostic layer, not a second mask.
 - Coarse MODIS ET is preserved by exact-overlap reconciliation on the full
   reconciled support before the final publication mask.
-- Final map dates: 2020-03-13, 2022-10-24 and 2022-03-30.
+- Illustrative cartographic/QC dates: 2020-03-13, 2024-07-11 and 2022-03-30.
+  These examples are not a sampling design for climatological inference.
 
 Virtual supports and MODIS-derived targets are not independent 20 m ET
 validation. Field comparisons use a derived field ET proxy and are reported as
@@ -40,11 +40,17 @@ such.
 
 ## Inputs and outputs
 
-Only the three portable scientific inputs are tracked in Git:
+The two portable inputs required by RF-25 are tracked in Git:
 
 ```text
 data/boundaries/fundacion_basin.geojson
 data/stations/fundacion_stations.geojson
+```
+
+The field series is also tracked but is used only by the separate field-proxy
+comparison and is not required by the canonical RF-25 pipeline:
+
+```text
 data/field/field_etgage.csv
 ```
 
@@ -53,12 +59,11 @@ figures are written under `outputs/`. Everything there is ignored by Git except
 `outputs/README.md`.
 
 The final RF always uses the frozen 25 variables. Before model fitting, `fresh`
-materializes every predictor family already implemented in this repository on
-the same 10 Virtual10 MODIS supports (S2/HLS, S1 R077/R142, ERA5-Land, CHIRPS,
-Landsat LST, albedo/FVC, seasonality and associated QA/provenance). The complete
-Virtual10 predictor master is preserved under `outputs/`; RF-25 then selects only
-its frozen 25 columns and the frozen GE90 support-period whitelist. Availability
-of unused candidates never becomes an eligibility gate for RF-25.
+materializes only the required Sentinel-2, MODIS-target and ERA5-Land sources on
+the same 10 Virtual10 supports. RF-25 then applies its frozen 25-column and GE90
+support-period contract. HLS, Sentinel-1, FVC, albedo, LST, CHIRPS and other
+historical candidates remain available through the separate
+`download-candidates` command and are not RF-25 dependencies.
 
 ## Fresh run on Windows
 
@@ -68,29 +73,29 @@ From the new repository:
 conda activate et-fundacion
 python -m pip install -e .
 python scripts\run_pipeline.py preflight
-python scripts\run_pipeline.py fresh --project ee-sneiderquintero --yes
+python scripts\run_pipeline.py fresh --project <earth-engine-project> --yes
 ```
 
 `fresh` deletes generated `outputs/` contents, reconstructs the Virtual10
-selection, downloads/materializes the complete implemented predictor universe
-on those 10 supports, derives the frozen GE90 RF-25 population using only the
-accepted 25 columns, trains and validates RF-25, derives the weighted AOA/DI and
-LPD, and produces the three final rasters.
+selection, materializes the sources required by RF-25, derives the frozen GE90
+population, trains and validates RF-25, derives weighted AOA/DI and LPD, produces
+the three illustrative rasters and writes a provenance manifest.
 
 To resume without deleting completed outputs:
 
 ```powershell
-python scripts\run_pipeline.py run --project ee-sneiderquintero
+python scripts\run_pipeline.py run --project <earth-engine-project>
 ```
 
 Useful individual stages:
 
 ```powershell
-python scripts\run_pipeline.py select --project ee-sneiderquintero
-python scripts\run_pipeline.py extract --project ee-sneiderquintero
+python scripts\run_pipeline.py select --project <earth-engine-project>
+python scripts\run_pipeline.py extract --project <earth-engine-project>
 python scripts\run_pipeline.py train
-python scripts\run_pipeline.py produce --project ee-sneiderquintero
-python scripts\run_pipeline.py download-candidates --project ee-sneiderquintero
+python scripts\run_pipeline.py produce --project <earth-engine-project>
+python scripts\run_pipeline.py provenance
+python scripts\run_pipeline.py download-candidates --project <earth-engine-project>
 ```
 
 No Google Drive export and no persistent Earth Engine asset are part of the

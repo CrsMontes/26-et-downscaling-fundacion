@@ -56,13 +56,13 @@ The RF-weighted AOA threshold is deliberately recomputed from each fresh final t
 
 `main` contains the RF-25 method. The prior stages are preserved as branches: `virtual`, `field` and `diagnostic`. Generated data now live inside `outputs/` in the repository directory but are ignored by Git. A fresh run downloads and rebuilds data locally without Google Drive.
 
-The final workflow does not reopen predictor selection or RF tuning. A fresh run first materializes the complete implemented predictor universe on the selected 10 Virtual10 supports, preserves that master, and then derives RF-25 from the frozen GE90 support-period whitelist using only the accepted 25 predictors. The five real stations remain external to training. Any future methodological change must be recorded explicitly rather than folded silently into production.
+The final workflow does not reopen predictor selection or RF tuning. A fresh run materializes only the Sentinel-2, MODIS-target and ERA5-Land sources needed by RF-25 on the selected 10 Virtual10 supports, then applies the frozen GE90 whitelist and accepted 25 predictors. The complete candidate archive remains a separate historical/experimental command. The five real stations remain external to training. Any future methodological change must be recorded explicitly rather than folded silently into production.
 
 
-## RF25 final closure ? 2026-09-11
+## RF25 final closure — 2026-09-11
 
 - RF25 remains the final production model: 25 predictors (16 Sentinel-2, 5 ERA5-Land, 4 temporal harmonics), 300 trees, `max_features=0.33`, `min_samples_leaf=3`, and `random_state=42`.
 - RF28 added `VPD_max_kPa`, `Precip_period_mm`, and `Precip_prev30d_mm`. It produced only a marginal spatial improvement (R2 0.469011 to 0.475484) while slightly degrading LOYO performance and KGE. A controlled 8-versus-9 feature-per-split test showed that the marginal gain was attributable to the added predictors rather than the `max_features` rounding change. RF28 is retained only as a sensitivity experiment.
 - Across 10 random seeds, spatial R2 was stable (mean 0.466860, SD 0.003916), indicating that random-state variability is small relative to spatial-transfer uncertainty.
 - A 5000-replicate spatial-block bootstrap gave a median spatial R2 of 0.458034 and an approximate 95% interval of 0.001992 to 0.630567, emphasizing uncertainty associated with the 10 spatial supports.
-- Final example production dates are `2020-03-13`, `2022-10-24`, and `2022-03-30`.
+- Illustrative cartographic/QC dates are `2020-03-13`, `2024-07-11`, and `2022-03-30`; they are not a sampling design for climatological inference.

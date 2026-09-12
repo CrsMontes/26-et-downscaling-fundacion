@@ -34,7 +34,7 @@ def test_station_geojson_can_be_overridden_for_virtual_candidate_extraction(tmp_
     assert get_station_geojson_path() == support_path.resolve()
 
 
-def test_fresh_core_materializes_candidates_before_rf_training(monkeypatch):
+def test_fresh_core_uses_only_rf25_sources_before_training(monkeypatch):
     run_pipeline = load_script("run_pipeline.py")
     calls = []
 
@@ -47,8 +47,33 @@ def test_fresh_core_materializes_candidates_before_rf_training(monkeypatch):
     names = [name for name, _ in calls]
     assert names == [
         "select_virtual_stations.py",
-        "download_all_candidate_predictors.py",
+        "download_rf25_inputs.py",
         "build_rf25_training_population.py",
         "train_rf25.py",
         "produce_rf25_rasters.py",
+        "write_rf25_provenance.py",
+    ]
+
+
+def test_extract_force_is_propagated_to_rf25_downloader(monkeypatch):
+    run_pipeline = load_script("run_pipeline.py")
+    calls = []
+
+    monkeypatch.setattr(run_pipeline, "validate_imported_package_root", lambda root: root)
+    monkeypatch.setattr(
+        run_pipeline,
+        "run_script",
+        lambda name, arguments: calls.append((name, list(arguments))),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["run_pipeline.py", "extract", "--project", "ee-test", "--force"],
+    )
+
+    run_pipeline.main()
+
+    assert calls == [
+        ("download_rf25_inputs.py", ["--project", "ee-test", "--force"]),
+        ("build_rf25_training_population.py", []),
     ]
