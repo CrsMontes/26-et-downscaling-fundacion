@@ -1,7 +1,8 @@
 from et_downscaling.workspace import (
     WORKSPACE_ENV_VAR,
+    field_validation_input,
     get_workspace_paths,
-    require_portable_inputs,
+    require_rf25_inputs,
 )
 
 
@@ -32,17 +33,24 @@ def test_default_workspace_is_repository_local(monkeypatch, tmp_path):
     assert paths.root == (repo / "outputs" / "current").resolve()
 
 
-def test_portable_inputs_are_exactly_three(tmp_path):
+def test_rf25_inputs_do_not_require_field_data(tmp_path):
     repo = tmp_path / "repo"
     required = {
         "basin": repo / "data" / "boundaries" / "fundacion_basin.geojson",
         "stations": repo / "data" / "stations" / "fundacion_stations.geojson",
-        "field": repo / "data" / "field" / "field_etgage.csv",
     }
     for path in required.values():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("test", encoding="utf-8")
 
-    found = require_portable_inputs(repo)
+    found = require_rf25_inputs(repo)
 
     assert found == required
+    assert not field_validation_input(repo).exists()
+
+
+def test_field_validation_path_remains_available(tmp_path):
+    repo = tmp_path / "repo"
+    expected = repo / "data" / "field" / "field_etgage.csv"
+
+    assert field_validation_input(repo) == expected.resolve()

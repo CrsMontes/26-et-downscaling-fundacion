@@ -9,10 +9,10 @@ import sys
 from pathlib import Path
 
 import et_downscaling
-from et_downscaling.workspace import require_portable_inputs
+from et_downscaling.workspace import field_validation_input, require_rf25_inputs
 
 
-DEFAULT_DATES = ["2020-03-13", "2022-10-24", "2022-03-30"]
+DEFAULT_DATES = ["2020-03-13", "2024-07-11", "2022-03-30"]
 
 
 def root() -> Path:
@@ -55,13 +55,17 @@ def clean_outputs() -> None:
 
 
 def preflight() -> None:
-    inputs = require_portable_inputs(root())
+    inputs = require_rf25_inputs(root())
+    field_path = field_validation_input(root())
     print("Repository:", root())
-    print("Portable inputs:")
+    print("Required RF-25 inputs:")
     for name, path in inputs.items():
         print(f"  {name}: {path}")
+    print("Optional separate field-validation input:", field_path)
+    print("Field-validation input present:", field_path.is_file())
     print("Output root:", root() / "outputs")
-    print("Candidate archive: all implemented predictor families on Virtual10")
+    print("Canonical extraction: only inputs required by RF-25 on Virtual10")
+    print("Historical candidate archive: separate download-candidates command")
     print("Final model: RF-25, fixed 25 predictors, no tuning")
     print("AOA: RF-weighted DI + spatial-CV threshold; LPD diagnostic")
     print("Google Drive: not used")
@@ -73,7 +77,7 @@ def run_core(project: str, dates: list[str]) -> None:
         ["--project", project, "--seed", "42", "--n-supports", "10", "--min-ge90-per-year", "20", "--max-candidates", "9123"],
     )
     run_script(
-        "download_all_candidate_predictors.py",
+        "download_rf25_inputs.py",
         ["--project", project],
     )
     run_script("build_rf25_training_population.py", [])
@@ -82,6 +86,10 @@ def run_core(project: str, dates: list[str]) -> None:
     for value in dates:
         production_args += ["--date", value]
     run_script("produce_rf25_rasters.py", production_args)
+    provenance_args = []
+    for value in dates:
+        provenance_args += ["--date", value]
+    run_script("write_rf25_provenance.py", provenance_args)
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -115,6 +123,9 @@ def build_parser() -> argparse.ArgumentParser:
     produce = sub.add_parser("produce")
     produce.add_argument("--project", required=True)
     produce.add_argument("--date", dest="dates", action="append", default=None)
+
+    provenance = sub.add_parser("provenance")
+    provenance.add_argument("--date", dest="dates", action="append", default=None)
 
     return parser
 
@@ -150,9 +161,10 @@ def main() -> None:
         run_script("select_virtual_stations.py", ["--project", args.project, "--seed", "42", "--n-supports", "10", "--min-ge90-per-year", "20", "--max-candidates", "9123"])
         return
     if args.command == "extract":
+        extract_args = ["--project", args.project]
         if args.force:
-            print("Note: --force is implicit for comprehensive candidate re-downloads.")
-        run_script("download_all_candidate_predictors.py", ["--project", args.project])
+            extract_args.append("--force")
+        run_script("download_rf25_inputs.py", extract_args)
         run_script("build_rf25_training_population.py", [])
         return
     if args.command == "train":
@@ -166,6 +178,12 @@ def main() -> None:
         for value in args.dates or DEFAULT_DATES:
             cmd += ["--date", value]
         run_script("produce_rf25_rasters.py", cmd)
+        return
+    if args.command == "provenance":
+        cmd = []
+        for value in args.dates or DEFAULT_DATES:
+            cmd += ["--date", value]
+        run_script("write_rf25_provenance.py", cmd)
         return
     raise RuntimeError(f"Unhandled command: {args.command}")
 

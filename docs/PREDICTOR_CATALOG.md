@@ -22,7 +22,7 @@ These retain their coarse meteorological support even though they are distribute
 
 ## Materialized candidate archive
 
-`scripts/download_all_candidate_predictors.py` reconstructs all candidate families already implemented and audited in the repository for the canonical 2020–2024 period on the **same 10 Virtual10 MODIS supports used by the final training design**. These files are preserved for provenance, diagnostics and possible future controlled experiments; they do not alter RF-25.
+`scripts/download_all_candidate_predictors.py` reconstructs the historical/experimental candidate families already implemented and audited for 2020–2024 on the **same 10 Virtual10 MODIS supports used by the final training design**. It is run explicitly through `download-candidates`; it is not part of canonical `fresh`, `run` or `extract`. These files are preserved for provenance, diagnostics and possible future controlled experiments; they do not alter RF-25.
 
 - Sentinel-2 common optical variables.
 - Sentinel-2 red-edge variables and NDRE.
@@ -39,6 +39,6 @@ These retain their coarse meteorological support even though they are distribute
 
 ### Training contract
 
-The complete Virtual10 predictor universe is first preserved in `outputs/current/master/master_predictor_store.parquet` and copied to `outputs/training/master/virtual10_all_predictors_2020_2024.*`. RF-25 is then built from the frozen GE90 support-period whitelist and **only the 25 accepted RF predictors**. Unused candidate missingness is not allowed to remove a training row. Real field stations remain external to training and candidate materialization.
+RF-25 is built from its S2/MODIS/ERA5-Land source master, the frozen GE90 support-period whitelist and **only the 25 accepted predictors**. The complete historical candidate universe can still be preserved separately under `outputs/current/master/master_predictor_store.parquet`. Its existence and missingness are not allowed to determine an RF-25 training row. Real field stations remain external to training and candidate materialization.
 
 Terrain slope/aspect were discussed historically but are not currently materialized as audited candidate predictors. They are therefore not silently added to the archive or model.

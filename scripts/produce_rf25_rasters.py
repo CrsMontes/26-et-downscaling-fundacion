@@ -10,10 +10,10 @@ import joblib
 
 from et_downscaling.rf25 import RF25_AOA_FILENAME, RF25_MODEL_FILENAME, validate_rf25_model
 from et_downscaling.rf25_overlap_production import download_rf25_basin
-from et_downscaling.workspace import get_workspace_paths, require_portable_inputs
+from et_downscaling.workspace import get_workspace_paths, require_rf25_inputs
 
 
-DEFAULT_DATES = ["2020-03-13", "2022-10-24", "2022-03-30"]
+DEFAULT_DATES = ["2020-03-13", "2024-07-11", "2022-03-30"]
 
 
 def project_root() -> Path:
@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     root = project_root()
-    require_portable_inputs(root)
+    require_rf25_inputs(root)
     workspace = get_workspace_paths(root).ensure()
     model_path = workspace.models / RF25_MODEL_FILENAME
     aoa_path = workspace.models / RF25_AOA_FILENAME

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 from et_downscaling.run_provenance import (
     build_run_provenance,
@@ -50,13 +51,37 @@ def test_repository_state_matches_current_git_head():
     assert state["dirty"] == bool(state["status_porcelain"])
 
 
+def test_repository_state_preserves_porcelain_status_columns(tmp_path):
+    responses = iter(
+        [
+            "abc123\r\n",
+            "final-rf25-closure\r\n",
+            " M modified.txt\r\nM  staged.txt\r\n?? untracked.txt\r\n",
+        ]
+    )
+    with patch(
+        "et_downscaling.run_provenance.subprocess.check_output",
+        side_effect=lambda *args, **kwargs: next(responses),
+    ):
+        state = repository_state(tmp_path)
+
+    assert state["commit"] == "abc123"
+    assert state["branch"] == "final-rf25-closure"
+    assert state["dirty"] is True
+    assert state["status_porcelain"] == [
+        " M modified.txt",
+        "M  staged.txt",
+        "?? untracked.txt",
+    ]
+
+
 def test_build_run_provenance_hashes_required_scientific_files(tmp_path):
     project_root = tmp_path / "repo"
     project_root.mkdir()
     (project_root / "environment-lock.yml").write_text("name: test\n", encoding="utf-8")
 
     canonical = {}
-    for name in ("basin", "stations", "field"):
+    for name in ("basin", "stations"):
         path = tmp_path / f"{name}.txt"
         path.write_text(name, encoding="utf-8")
         canonical[name] = path
@@ -76,7 +101,7 @@ def test_build_run_provenance_hashes_required_scientific_files(tmp_path):
         output_paths={"output": output},
     )
 
-    assert set(provenance["canonical_inputs"]) == {"basin", "field", "stations"}
+    assert set(provenance["canonical_inputs"]) == {"basin", "stations"}
     assert provenance["training_sources"]["source"]["sha256"] == sha256_file(source)
     assert provenance["training_master"]["sha256"] == sha256_file(master)
     assert provenance["run_outputs"]["output"]["sha256"] == sha256_file(output)

@@ -51,7 +51,7 @@ def repository_state(project_root: Path) -> dict[str, object]:
             cwd=project_root,
             text=True,
             stderr=subprocess.DEVNULL,
-        ).strip()
+        ).rstrip("\r\n")
 
     try:
         commit = git("rev-parse", "HEAD")

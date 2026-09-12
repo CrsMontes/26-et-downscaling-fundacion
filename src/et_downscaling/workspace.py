@@ -1,8 +1,8 @@
 """Repository-local generated-data workspace for ET Fundación.
 
 All generated data are written below ``outputs/`` in this repository and are
-ignored by Git. The three portable scientific inputs remain tracked under
-``data/``. ``ET_FUNDACION_WORKSPACE`` can still override the operational
+ignored by Git. Portable scientific inputs remain tracked under ``data/``.
+``ET_FUNDACION_WORKSPACE`` can still override the operational
 ``outputs/current`` path for advanced use, but the default is intentionally
 self-contained.
 """
@@ -70,13 +70,12 @@ def get_workspace_paths(project_root: Path) -> WorkspacePaths:
     )
 
 
-def require_portable_inputs(project_root: Path) -> dict[str, Path]:
-    """Validate the three canonical local inputs kept inside the repository."""
+def require_rf25_inputs(project_root: Path) -> dict[str, Path]:
+    """Validate the local inputs required by the canonical RF-25 workflow."""
     project_root = Path(project_root).resolve()
     inputs = {
         "basin": project_root / "data" / "boundaries" / "fundacion_basin.geojson",
         "stations": project_root / "data" / "stations" / "fundacion_stations.geojson",
-        "field": project_root / "data" / "field" / "field_etgage.csv",
     }
     missing = [str(path) for path in inputs.values() if not path.is_file()]
     if missing:
@@ -84,3 +83,8 @@ def require_portable_inputs(project_root: Path) -> dict[str, Path]:
             "Missing canonical portable input(s):\n" + "\n".join(missing)
         )
     return inputs
+
+
+def field_validation_input(project_root: Path) -> Path:
+    """Return the separate field-comparison input path without requiring it."""
+    return Path(project_root).resolve() / "data" / "field" / "field_etgage.csv"
