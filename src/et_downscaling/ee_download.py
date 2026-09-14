@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from http.client import IncompleteRead, RemoteDisconnected
 import random
 import time
 import urllib.request
@@ -46,7 +47,7 @@ def download_ee_bytes(image: ee.Image, parameters: dict, timeout_seconds: int) -
                 f"Earth Engine direct download failed (HTTP {error.code}): "
                 f"{body or error.reason}"
             ) from error
-        except (URLError, TimeoutError) as error:
+        except (URLError, TimeoutError, IncompleteRead, RemoteDisconnected) as error:
             if attempt < DIRECT_DOWNLOAD_MAX_ATTEMPTS:
                 delay = _retry_delay_seconds(attempt)
                 print(

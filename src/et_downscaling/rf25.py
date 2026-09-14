@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-import joblib
+import hashlib
+import json
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 
@@ -106,7 +107,68 @@ def validate_rf25_model(
             raise ValueError("RF-25 fitted feature names differ from the frozen schema.")
 
 
+def _signature_array(value) -> np.ndarray:
+    """Canonical numerical values only; never expose structured-array padding."""
+    array = np.asarray(value)
+    dtypes = {"b": "u1", "i": "<i8", "u": "<u8", "f": "<f8"}
+    if array.dtype.kind not in dtypes:
+        raise TypeError(f"Unsupported scientific-state dtype: {array.dtype}")
+    return np.ascontiguousarray(array, dtype=dtypes[array.dtype.kind])
+
+
 def rf25_model_signature(model: RandomForestRegressor) -> str:
-    """Return a deterministic hash of the fitted sklearn estimator state."""
+    """SHA-256 of explicit fitted RF state, independent of pickle and node padding.
+
+    Artifact-file SHA-256 is a separate provenance identifier. This function
+    reads the estimator without changing its arrays, parameters or predictions.
+    """
     validate_rf25_model(model)
-    return str(joblib.hash(model, hash_name="sha1"))
+    digest = hashlib.sha256()
+
+    def feed(payload: bytes) -> None:
+        digest.update(len(payload).to_bytes(8, "big"))
+        digest.update(payload)
+
+    def json_default(value):
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        raise TypeError(f"Unsupported scientific-state parameter type: {type(value).__name__}")
+
+    def metadata(label: str, value) -> None:
+        feed(json.dumps([label, value], sort_keys=True, separators=(",", ":"),
+                        allow_nan=False, default=json_default).encode("utf-8"))
+
+    def array(label: str, value) -> None:
+        canonical = _signature_array(value)
+        metadata(label, {"dtype": canonical.dtype.str, "shape": canonical.shape})
+        feed(canonical.tobytes(order="C"))
+
+    metadata("signature_format", "rf25_scientific_model_state_v1")
+    metadata("estimator_type", [type(model).__module__, type(model).__qualname__])
+    metadata("parameters", model.get_params(deep=False))
+    metadata("feature_names", list(getattr(model, "feature_names_in_", RF25_MODEL_FEATURES)))
+    metadata("n_features_in", int(model.n_features_in_))
+    metadata("n_outputs", int(model.n_outputs_))
+    metadata("tree_count", len(model.estimators_))
+    for index, estimator in enumerate(model.estimators_):
+        tree = estimator.tree_
+        state = tree.__getstate__()
+        metadata("tree", {"index": index,
+                          "type": [type(estimator).__module__, type(estimator).__qualname__],
+                          "parameters": estimator.get_params(deep=False),
+                          "n_features_in": int(estimator.n_features_in_),
+                          "n_outputs": int(estimator.n_outputs_),
+                          "max_features": int(estimator.max_features_),
+                          "tree_n_features": int(tree.n_features),
+                          "tree_n_outputs": int(tree.n_outputs),
+                          "node_count": int(state["node_count"]),
+                          "max_depth": int(state["max_depth"])})
+        array("n_classes", tree.n_classes)
+        # Include every named field, including missing_go_to_left. A field view
+        # is copied to a contiguous numerical array before hashing its bytes.
+        for name in sorted(state["nodes"].dtype.names):
+            array("nodes/" + name, state["nodes"][name])
+        array("values", state["values"])
+    return digest.hexdigest()
