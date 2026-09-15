@@ -22,6 +22,7 @@ from et_downscaling.field_validation import (
     KEYS, aggregate_field_periods, apply_scenarios, load_field_inputs,
     modis_periods, ndvi_kc, prepare_field_daily, sha256, unique,
 )
+from et_downscaling.field_station_identity import validate_station_table
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "outputs/evaluation/field_validation"
@@ -64,26 +65,34 @@ def sample(path, longitude, latitude):
 def build_tables():
     manifest = json.loads((HALOS / "deterministic_signature_migration_manifest.json").read_text())
     assert manifest["status"] == "completed"
-    hashes_before = {name: sha256(ROOT / name) for name in manifest["tiff_sha256_after"]}
-    assert hashes_before == manifest["tiff_sha256_after"]
-    entries = {entry["metadata_file"]: entry for entry in manifest["metadata_files"]}
+    migration = json.loads((OUTPUT / "station_identity_migration_manifest.json").read_text())
+    if migration["status"] != "completed":
+        raise ValueError("Station identity migration is not complete.")
+    entries = {entry["new_path"]: entry for entry in migration["files"]}
+    expected_rasters = {name: entry["sha256_after"] for name, entry in entries.items() if name.endswith(".tif")}
+    hashes_before = {name: sha256(ROOT / name) for name in expected_rasters}
+    assert hashes_before == expected_rasters
+    if not (CACHE / "contract.json").is_file():
+        raise FileNotFoundError("Local raw field cache is unavailable. Supply an explicitly migrated --cache-dir; the validated workbook remains available for offline analysis.")
     contract = json.loads((CACHE / "contract.json").read_text())
     for name in ("data/field/field_etgage.csv", "data/stations/fundacion_stations.geojson"):
         assert sha256(ROOT / name) == contract[name], "Cache station/field inputs changed"
     field, stations = load_field_inputs(ROOT)
     assert pd.to_datetime(field.date).dt.year.eq(2022).all()
     reference = pd.read_csv(CACHE / "reference_et_daily.csv")
+    validate_station_table(reference, require_uid=True)
     daily = prepare_field_daily(field, stations, reference)
     windows = modis_periods(field)
     periods = aggregate_field_periods(daily, windows, stations)
     satellite = pd.read_csv(CACHE / "field_satellite.csv", parse_dates=["period_start"])
+    validate_station_table(satellite, require_uid=True)
     unique(satellite, KEYS, "cached satellite")
     periods = periods.merge(satellite[KEYS + ["NDVI_local_20m", "number_days"]], on=KEYS,
                             how="left", validate="one_to_one", suffixes=("", "_satellite"))
     present = periods.number_days_satellite.notna()
     assert periods.loc[present, "number_days"].eq(periods.loc[present, "number_days_satellite"]).all()
-    # NDVI sensitivity is explicitly limited to ST04/ST05 in this review.
-    periods.loc[~periods.station_id.isin(["ST04", "ST05"]), "NDVI_local_20m"] = np.nan
+    # NDVI sensitivity is explicitly limited to ST01/ST05 in this review.
+    periods.loc[~periods.station_id.isin(["ST01", "ST05"]), "NDVI_local_20m"] = np.nan
     periods.loc[periods.NDVI_local_20m.le(-9990), "NDVI_local_20m"] = np.nan
     pixel_rows = []
     for period in periods.itertuples(index=False):
@@ -94,11 +103,11 @@ def build_tables():
                   "ET_MODIS_mm_period": np.nan, **{name: np.nan for name in BANDS}}
         if metadata_path.is_file():
             entry = entries[metadata_path.relative_to(ROOT).as_posix()]
-            assert sha256(metadata_path) == entry["metadata_sha256_after"]
+            assert sha256(metadata_path) == entry["sha256_after"]
             metadata = json.loads(metadata_path.read_text())
             assert (metadata["station_id"], metadata["period_start"]) == (station, date)
             assert (metadata["longitude"], metadata["latitude"]) == (period.longitude, period.latitude)
-            signature = manifest["st04_extension_signature"] if station == "ST04" else manifest["canonical_production_scientific_signature"]
+            signature = manifest["st04_extension_signature"] if station == "ST01" else manifest["canonical_production_scientific_signature"]
             assert metadata["scientific_signature"] == signature
             raster = folder / f"RF25_halo7_{station}_{date}_20m.tif"
             values, _, resolution, pixel = sample(raster, period.longitude, period.latitude)
@@ -131,7 +140,7 @@ def build_tables():
         periods = periods.merge(subset.rename(columns={"Kc_field_proxy": kc, "ET_field_proxy_mm_period": et}),
                                 on=KEYS, validate="one_to_one")
     periods["period_end"] = periods.period_start + pd.to_timedelta(periods.number_days, unit="D")
-    periods["validation_domain"] = np.where(periods.station_id.eq("ST04"), "validation_extension", "fundacion_basin")
+    periods["validation_domain"] = np.where(periods.station_id.eq("ST01"), "validation_extension", "fundacion_basin")
     period_table = periods.rename(columns={
         "station": "land_cover", "number_days": "period_days", "n_valid_field_days": "valid_field_days",
         "field_reference_eto_mm_period": "field_eto_equivalent_mm_period",
@@ -152,7 +161,7 @@ def build_tables():
         table = daily_table if name in daily_table else period_table
         table[name] = table[name].astype("boolean")
     assert len(daily_table) == 615 and len(period_table) == 80
-    assert period_table.loc[period_table.station_id.isin(["ST01", "ST02", "ST03"]),
+    assert period_table.loc[period_table.station_id.isin(["ST02", "ST03", "ST04"]),
                             ["ndvi_s2_20m", "kc_ndvi_s2_20m", "field_et_ndvi_mm_period"]].isna().all().all()
     return daily_table, period_table, hashes_before
 
@@ -259,9 +268,13 @@ def save_workbook(daily, periods):
 
 
 def main():
+    global CACHE
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cache-dir", type=Path, help="Offline raw field cache with current station identities and matching input contract")
     parser.add_argument("--save", action="store_true", help="Save after the row checks have been reviewed")
     args = parser.parse_args()
+    if args.cache_dir is not None:
+        CACHE = args.cache_dir
     daily, periods, raster_hashes = build_tables()
     print("DAILY CHECK: 2022-03-14")
     print(daily.loc[daily.date.eq("2022-03-14")].to_string(index=False))

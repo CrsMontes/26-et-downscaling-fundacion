@@ -1,4 +1,4 @@
-﻿"""Audit ST04 halo convergence with nearest-valid ERA5-Land coastal fill."""
+﻿"""Audit ST01 halo convergence with nearest-valid ERA5-Land coastal fill."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from rasterio.transform import Affine
 ROOT = Path.cwd()
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import audit_st04_halo_convergence as audit
+import audit_mangrove_halo_convergence as audit
 import produce_field_rf25_halo as base
 
 import et_downscaling.rf25_overlap_production as overlap_production
@@ -34,7 +34,7 @@ from et_downscaling.rf25 import (
 
 PROJECT = "ee-sneiderquintero"
 DATE = "2022-03-30"
-STATION_ID = "ST04"
+STATION_ID = "ST01"
 
 REFERENCE_RADIUS = 4  # 9x9
 RADII = [3, 4]        # 7x7 and 9x9
@@ -54,7 +54,7 @@ def main():
 
     if station["inside_basin"]:
         raise RuntimeError(
-            "ST04 was expected outside the official basin domain."
+            "ST01 was expected outside the official basin domain."
         )
 
     workspace = base.get_workspace_paths(ROOT).ensure()
@@ -79,7 +79,7 @@ def main():
     )
 
     # ------------------------------------------------------------------
-    # Resolve exactly the nearest valid ERA5-Land support used for ST04.
+    # Resolve exactly the nearest valid ERA5-Land support used for ST01.
     # ------------------------------------------------------------------
     era5_collection = get_era5_collection()
 
@@ -109,7 +109,7 @@ def main():
 
     print()
     print("=" * 82)
-    print("ST04 ERA5-LAND VALIDATION EXTENSION")
+    print("ST01 ERA5-LAND VALIDATION EXTENSION")
     print("=" * 82)
     print("Station:", STATION_ID, station["station"])
     print("ERA5 support longitude:", support_lon)
@@ -162,7 +162,7 @@ def main():
         )
 
         # Preserve every existing ERA5-Land pixel.
-        # Only masked meteorological values receive the ST04
+        # Only masked meteorological values receive the ST01
         # nearest-valid-land support.
         meteorology_filled = (
             context["meteorology"]
@@ -249,7 +249,7 @@ def main():
     )
 
     fine_tile = base.fine_tile_for_halo(
-        "ST04_era5_land_halo9_convergence",
+        "ST01_era5_land_halo9_convergence",
         transform9,
     )
 
@@ -258,7 +258,7 @@ def main():
         / "outputs"
         / "evaluation"
         / "field_validation"
-        / "st04_validation_extension"
+        / "st01_validation_extension"
         / "era5_nearest_land_halo_convergence"
         / DATE
     )
@@ -321,7 +321,7 @@ def main():
         print()
         print("=" * 82)
         print(
-            f"ST04 {DATE}: solving {size}x{size} "
+            f"ST01 {DATE}: solving {size}x{size} "
             "with ERA5 nearest-land fill"
         )
         print("=" * 82)
@@ -414,12 +414,12 @@ def main():
 
     summary_path = (
         output_root
-        / "st04_era5_halo_summary.csv"
+        / "st01_era5_halo_summary.csv"
     )
 
     comparison_path = (
         output_root
-        / "st04_era5_halo_comparison.csv"
+        / "st01_era5_halo_comparison.csv"
     )
 
     summary_df.to_csv(
@@ -494,7 +494,7 @@ def main():
     )
     print()
     print(
-        "ST04 HALO-7 ACCEPTED :",
+        "ST01 HALO-7 ACCEPTED :",
         accepted,
     )
 

@@ -1,4 +1,4 @@
-﻿"""Produce ST04 RF25 halo-7 validation products with ERA5-Land coastal support."""
+﻿"""Produce ST01 RF25 halo-7 validation products with ERA5-Land coastal support."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from et_downscaling.rf25 import (
 )
 
 PROJECT = "ee-sneiderquintero"
-STATION_ID = "ST04"
+STATION_ID = "ST01"
 
 METHOD = (
     "st04_validation_extension_"
@@ -71,7 +71,7 @@ def main():
     support_lat = float(support_coordinates[1])
 
     print("=" * 80)
-    print("ST04 VALIDATION-DOMAIN EXTENSION")
+    print("ST01 VALIDATION-DOMAIN EXTENSION")
     print("=" * 80)
     print("ERA5 support:", support_lon, support_lat)
     print("Distance (m):", support_distance_m)
@@ -197,7 +197,7 @@ def main():
         "halo_7_vs_9_max_abs_difference_mm": 0.000002,
         "note": (
             "Missing ERA5-Land meteorological predictors are filled "
-            "from the nearest valid ERA5-Land support used for ST04. "
+            "from the nearest valid ERA5-Land support used for ST01. "
             "RF25 model, AOA, Sentinel-2 predictors, temporal predictors, "
             "MODIS parent ET and exact-overlap reconciliation are unchanged."
         ),
@@ -205,7 +205,7 @@ def main():
 
     (
         manifest_dir
-        / "ST04_validation_extension_manifest.json"
+        / "ST01_validation_extension_manifest.json"
     ).write_text(
         json.dumps(manifest, indent=2),
         encoding="utf-8",

@@ -19,11 +19,15 @@ workflow and its separate field comparison.
 
 | station_id | station |
 |---|---|
-| ST01 | Clean pasture |
-| ST02 | Oil palm |
-| ST03 | Banana |
-| ST04 | Mangrove |
+| ST01 | Mangrove |
+| ST02 | Pasture |
+| ST03 | Oil palm plantation |
+| ST04 | Banana plantation |
 | ST05 | Dry forest |
+
+Original source-sheet names are preserved exactly. Current station IDs must be
+joined with the physical identity/version evidence described in
+[the migration crosswalk](../docs/STATION_IDENTITY_MIGRATION.md).
 
 Historical field workbooks and intermediate reconstruction files may be kept
 locally under `field/archive/`. This directory is ignored by Git and is not

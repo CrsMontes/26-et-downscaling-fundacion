@@ -43,10 +43,10 @@ def test_dependency_closure_keeps_ineligible_boundary_and_stops_there():
 
 def field_rows():
     rows = []
-    # Distinct failures exercise every sequential gate on ST01.
+    # Distinct failures exercise every sequential gate on ST02.
     for i in range(9):
         rows.append({
-            "station_id": "ST01", "period_start": pd.Timestamp("2022-03-14") + pd.Timedelta(days=i*8),
+            "station_id": "ST02", "period_start": pd.Timestamp("2022-03-14") + pd.Timedelta(days=i*8),
             "field_period_valid": i != 0, "field_reference_eto_mm_period": 30. + i if i != 0 else np.nan,
             "NDVI_local_20m": np.nan if i == 1 else .6,
             "ET_MODIS_mm_period": np.nan if i == 2 else 28. + i,
@@ -76,7 +76,7 @@ def test_four_sets_available_sample_is_not_restricted_by_ndvi_sensitivity():
 def test_attrition_is_nested_and_identifies_each_stage():
     pairs = apply_validation_scenarios(field_rows())
     attrition = build_sequential_attrition(pairs)
-    ndvi = attrition.loc[attrition.scenario.eq("ndvi20_all") & attrition.station_id.eq("ST01")].sort_values("stage_order")
+    ndvi = attrition.loc[attrition.scenario.eq("ndvi20_all") & attrition.station_id.eq("ST02")].sort_values("stage_order")
     assert ndvi.n_remaining.tolist() == [9,8,7,6,5,4,3,2,1]
     assert ndvi.n_lost_at_stage.tolist() == [0,1,1,1,1,1,1,1,1]
     total = attrition.loc[attrition.scenario.eq("ndvi20_all") & attrition.station_id.eq("ALL")]

@@ -1,4 +1,4 @@
-﻿"""Diagnose RF25 support eligibility around ST04."""
+﻿"""Diagnose RF25 support eligibility around ST01."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from et_downscaling.overlap_reconciliation import build_overlap_edges
 
 
 DATE = "2022-03-30"
-STATION_ID = "ST04"
+STATION_ID = "ST01"
 REFERENCE_RADIUS = 4
 RADII = [2, 3, 4]
 
@@ -52,7 +52,7 @@ def main():
         / "outputs"
         / "evaluation"
         / "field_validation"
-        / "st04_validation_extension"
+        / "st01_validation_extension"
         / "halo_convergence"
         / DATE
         / "raw"
@@ -62,7 +62,7 @@ def main():
 
     if len(raw_paths) != 1:
         raise RuntimeError(
-            f"Expected one existing ST04 raw tile, found {len(raw_paths)}."
+            f"Expected one existing ST01 raw tile, found {len(raw_paths)}."
         )
 
     raw_path = raw_paths[0]
@@ -341,7 +341,7 @@ def main():
 
     print()
     print("=" * 90)
-    print("ST04 SUPPORT DIAGNOSTIC")
+    print("ST01 SUPPORT DIAGNOSTIC")
     print("=" * 90)
     print(result.to_string(index=False))
 
@@ -350,10 +350,10 @@ def main():
         / "outputs"
         / "evaluation"
         / "field_validation"
-        / "st04_validation_extension"
+        / "st01_validation_extension"
         / "halo_convergence"
         / DATE
-        / "st04_support_diagnostic.csv"
+        / "st01_support_diagnostic.csv"
     )
 
     result.to_csv(output, index=False)

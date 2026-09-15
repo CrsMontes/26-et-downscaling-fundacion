@@ -1,0 +1,816 @@
+{
+  "status": "completed",
+  "completed_utc": "2026-09-15T01:02:24.040869+00:00",
+  "all_differences_explained": true,
+  "unexpected_changes": [],
+  "active_old_identity_references": [],
+  "authoritative_notebook_sha256": "40f3faad4e519c192d0c3b9ae95b670b9b705c199f56d3ddae7c969c5e8c9187",
+  "authoritative_notebook_size_bytes": 12090289,
+  "cell_count": 30,
+  "previous_reconciled_sha256": "56045ab8d7698a4dfa07db60f1209b722a9585b8483b35f90e9669e34916f440",
+  "previous_reconciled_size_bytes": 3347839,
+  "previous_cell_count": 27,
+  "notebook_preserved_byte_exact": true,
+  "notebook_outputs_refreshed": false,
+  "notebook_executed_during_this_reconciliation": false,
+  "executable_project_code_changed": false,
+  "markdown_changed": false,
+  "notebook_or_cell_metadata_changed": false,
+  "cv_sources": {
+    "rf25-cv-inputs-20260914": {
+      "source_identical": true,
+      "ast_identical": true,
+      "source_sha256": "0a7e08ca1d396aae1f24792659f326ddb1d184030c488a6f7386ec74a7204076"
+    },
+    "589bd454": {
+      "source_identical": true,
+      "ast_identical": true,
+      "source_sha256": "fc97506f263892e0aeef51415b69b02757ebdd3ff4cf986d6feff17e54673847"
+    }
+  },
+  "cv_eight_artifact_hashes_unchanged": true,
+  "daily_rows": 615,
+  "period_rows": 80,
+  "figure3_n": 417,
+  "figure3_counts": {
+    "ST01": 66,
+    "ST02": 82,
+    "ST03": 82,
+    "ST04": 112,
+    "ST05": 75
+  },
+  "figure3_values_and_qc_population_identical": true,
+  "common_n": 37,
+  "common_counts": {
+    "ST01": 8,
+    "ST02": 5,
+    "ST03": 7,
+    "ST04": 7,
+    "ST05": 10
+  },
+  "fixed_kc_n": 19,
+  "figure11_and_temporal_rows_equal_canonical_common_rows": true,
+  "field_proxy_values_identical": true,
+  "manuscript_metrics_max_absolute_roundoff": 1.7763568394002505e-15,
+  "accepted_manuscript_output_sha256": {
+    "outputs/evaluation/field_validation/analysis/figure_03_field_derived_et_by_land_cover_final_ids.png": "6feaa527d0670a09f95e2532571ba64a451212c511755f4f570a59aa4cfd7803",
+    "outputs/evaluation/manuscript_figures/rf25_modis_spatial_comparison_three_dates_geographic_compact_v3.png": "4d0953b6db1f8bc92203522bbdb68d83ad0c35fe71e94f4b0124aa11a9106615",
+    "outputs/evaluation/manuscript_figures/rf25_modis_spatial_comparison_three_dates_geographic_compact_v3.pdf": "f3c7b726f8e5bd69f8f200abad942c9c7909c4af1415097c8425317d555fc4ff",
+    "outputs/evaluation/manuscript_figures/figure_11_field_vs_modis_rf25_10_60.png": "8b77a0f62b866706a7c2ac2aff49a11692380df56806f8839bb39e7fa9eb7746",
+    "outputs/evaluation/manuscript_figures/figure_11_field_vs_modis_rf25_10_60.pdf": "e8ccd3d80c625298df3867c6bf5ffddcfdacc6d34aa73b7aac5ee2cf9da7aa63",
+    "outputs/evaluation/manuscript_figures/figure_temporal_comparison_all_sites_stacked.png": "85dfed98e0a459aad1cd11c59ea1442222abd2873c08f46330a3571b28789dc1",
+    "outputs/evaluation/manuscript_figures/figure_temporal_comparison_all_sites_stacked.pdf": "bf0f9d22e292247e3d0a0ccd7ffdd2870b98353092997edf1d5d4b2566878b87",
+    "outputs/evaluation/manuscript_figures/figure_11_field_vs_modis_rf25_metrics.csv": "0f06240ba1b0ed238ebf1a19c00b4111cd6e38eeecd4f8c9c7755f7449e09ed5"
+  },
+  "cells": [
+    {
+      "cell_number": 1,
+      "cell_id": "field-analysis-01",
+      "type": "markdown",
+      "added": false,
+      "changed_fields": [],
+      "categories": [
+        "unchanged"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "c162527506e50f227dc115c6af03316d2a7dd02f2f807a9d9063810b1d87854b",
+      "current_source_sha256": "c162527506e50f227dc115c6af03316d2a7dd02f2f807a9d9063810b1d87854b",
+      "execution_count_before": null,
+      "execution_count_after": null,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 2,
+      "cell_id": "field-analysis-02",
+      "type": "markdown",
+      "added": false,
+      "changed_fields": [],
+      "categories": [
+        "unchanged"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "0621a22d6a9683fcbfb25dde1ad9591ae5360b19329b7b327949582bbd0fcd95",
+      "current_source_sha256": "0621a22d6a9683fcbfb25dde1ad9591ae5360b19329b7b327949582bbd0fcd95",
+      "execution_count_before": null,
+      "execution_count_after": null,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 3,
+      "cell_id": "field-analysis-03",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "outputs"
+      ],
+      "categories": [
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "97c82f8a9a6c9c03a5176b132f35a77f8996dee00ee236ef5804fd0a4288bf5f",
+      "current_source_sha256": "97c82f8a9a6c9c03a5176b132f35a77f8996dee00ee236ef5804fd0a4288bf5f",
+      "execution_count_before": 1,
+      "execution_count_after": 1,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 4,
+      "cell_id": "field-analysis-04",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "outputs"
+      ],
+      "categories": [
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "48264752d0c69669b0bf0a966d0ab578ed5bfad06c89413e22cbc7051a0e51b3",
+      "current_source_sha256": "48264752d0c69669b0bf0a966d0ab578ed5bfad06c89413e22cbc7051a0e51b3",
+      "execution_count_before": 2,
+      "execution_count_after": 2,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 5,
+      "cell_id": "field-analysis-05",
+      "type": "markdown",
+      "added": false,
+      "changed_fields": [],
+      "categories": [
+        "unchanged"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "a738852e07d3145f682140d15cc5ab4e23712c43dccb5d96913208530bc69a9a",
+      "current_source_sha256": "a738852e07d3145f682140d15cc5ab4e23712c43dccb5d96913208530bc69a9a",
+      "execution_count_before": null,
+      "execution_count_after": null,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 6,
+      "cell_id": "field-analysis-06",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "outputs"
+      ],
+      "categories": [
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "17269fa4d231d8606d10756782c5ecc1c98931d0bdc210f7da16a694e6b86ffc",
+      "current_source_sha256": "17269fa4d231d8606d10756782c5ecc1c98931d0bdc210f7da16a694e6b86ffc",
+      "execution_count_before": 3,
+      "execution_count_after": 3,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 7,
+      "cell_id": "field-analysis-07",
+      "type": "markdown",
+      "added": false,
+      "changed_fields": [],
+      "categories": [
+        "unchanged"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "a0e08a7dcedc6ea35a24e68b1392d3abbd08fb539ed35bf207bac0625e068996",
+      "current_source_sha256": "a0e08a7dcedc6ea35a24e68b1392d3abbd08fb539ed35bf207bac0625e068996",
+      "execution_count_before": null,
+      "execution_count_after": null,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 8,
+      "cell_id": "field-analysis-08",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "outputs"
+      ],
+      "categories": [
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "2378c1e9484652b39317d12831221acc4b7cd153f60b5945b9bd88c63202905e",
+      "current_source_sha256": "2378c1e9484652b39317d12831221acc4b7cd153f60b5945b9bd88c63202905e",
+      "execution_count_before": 4,
+      "execution_count_after": 4,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 9,
+      "cell_id": "field-analysis-09",
+      "type": "markdown",
+      "added": false,
+      "changed_fields": [],
+      "categories": [
+        "unchanged"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "2629bd0cf9834ff19ff57fa1d1e2f630dbdac0c717cb601bc9b1cba90148f253",
+      "current_source_sha256": "2629bd0cf9834ff19ff57fa1d1e2f630dbdac0c717cb601bc9b1cba90148f253",
+      "execution_count_before": null,
+      "execution_count_after": null,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 10,
+      "cell_id": "field-analysis-10",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "outputs"
+      ],
+      "categories": [
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "4e8264e8e2c32b9cfb18e706c7ee56cf2b866d1e9b3af3d172a6343e9395ec32",
+      "current_source_sha256": "4e8264e8e2c32b9cfb18e706c7ee56cf2b866d1e9b3af3d172a6343e9395ec32",
+      "execution_count_before": 5,
+      "execution_count_after": 5,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 11,
+      "cell_id": "field-analysis-11",
+      "type": "markdown",
+      "added": false,
+      "changed_fields": [],
+      "categories": [
+        "unchanged"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "b970373c1757377ecfd25ea559e02a15b5d55b9363b2490906e9bd6ed9217427",
+      "current_source_sha256": "b970373c1757377ecfd25ea559e02a15b5d55b9363b2490906e9bd6ed9217427",
+      "execution_count_before": null,
+      "execution_count_after": null,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 12,
+      "cell_id": "field-analysis-12",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "outputs"
+      ],
+      "categories": [
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "a44f59b5aad5d253bdfbe7cfcb17cf77a0de27c4e4fe6c1c338d6576e29feefa",
+      "current_source_sha256": "a44f59b5aad5d253bdfbe7cfcb17cf77a0de27c4e4fe6c1c338d6576e29feefa",
+      "execution_count_before": 6,
+      "execution_count_after": 6,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 13,
+      "cell_id": "field-analysis-13",
+      "type": "markdown",
+      "added": false,
+      "changed_fields": [],
+      "categories": [
+        "unchanged"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "8a20b02d7274e5bfa774a0af7ea08b52cd8554a553d9133202bdb0e9970637be",
+      "current_source_sha256": "8a20b02d7274e5bfa774a0af7ea08b52cd8554a553d9133202bdb0e9970637be",
+      "execution_count_before": null,
+      "execution_count_after": null,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 14,
+      "cell_id": "field-analysis-14",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "outputs"
+      ],
+      "categories": [
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "5851e6337ed658c28676fcb1c667146d493e491c8765654b9605da3e4be64e86",
+      "current_source_sha256": "5851e6337ed658c28676fcb1c667146d493e491c8765654b9605da3e4be64e86",
+      "execution_count_before": 7,
+      "execution_count_after": 7,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 15,
+      "cell_id": "field-analysis-15",
+      "type": "markdown",
+      "added": false,
+      "changed_fields": [],
+      "categories": [
+        "unchanged"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "6ece292c4bcae8122541832c06c2866c46556ff86d565c5c9e8d73e628c2e697",
+      "current_source_sha256": "6ece292c4bcae8122541832c06c2866c46556ff86d565c5c9e8d73e628c2e697",
+      "execution_count_before": null,
+      "execution_count_after": null,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 16,
+      "cell_id": "field-analysis-16",
+      "type": "code",
+      "added": false,
+      "changed_fields": [],
+      "categories": [
+        "unchanged"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "afcd6dc9dbe9053bf032a769eed945a79827c5bc9bf3a8402511036de6c83208",
+      "current_source_sha256": "afcd6dc9dbe9053bf032a769eed945a79827c5bc9bf3a8402511036de6c83208",
+      "execution_count_before": 8,
+      "execution_count_after": 8,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 17,
+      "cell_id": "field-analysis-17",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "outputs"
+      ],
+      "categories": [
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "76f0b433ed34307e08b57d564fc2fdc2baa5dd8083e1535d3804691f8d5169f9",
+      "current_source_sha256": "76f0b433ed34307e08b57d564fc2fdc2baa5dd8083e1535d3804691f8d5169f9",
+      "execution_count_before": 9,
+      "execution_count_after": 9,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [
+        {
+          "output_index": 0,
+          "mime": "image/png",
+          "bytes": 105184,
+          "sha256": "ed6e5c512ea965b10699adaf2de962faeda81abc19d6da87d8021042f9328e2c"
+        }
+      ],
+      "current_embedded_images": [
+        {
+          "output_index": 0,
+          "mime": "image/png",
+          "bytes": 105184,
+          "sha256": "ed6e5c512ea965b10699adaf2de962faeda81abc19d6da87d8021042f9328e2c"
+        }
+      ]
+    },
+    {
+      "cell_number": 18,
+      "cell_id": "field-analysis-18",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "outputs"
+      ],
+      "categories": [
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "e77af41be183a2324554d09282b9eb9bf3f35f73ef9bd2a4c1be5c24054308bb",
+      "current_source_sha256": "e77af41be183a2324554d09282b9eb9bf3f35f73ef9bd2a4c1be5c24054308bb",
+      "execution_count_before": 10,
+      "execution_count_after": 10,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [
+        {
+          "output_index": 0,
+          "mime": "image/png",
+          "bytes": 77941,
+          "sha256": "b4d795b368344f1405da26c927bcf57678e0d996856d277105c533215c06caba"
+        }
+      ],
+      "current_embedded_images": [
+        {
+          "output_index": 0,
+          "mime": "image/png",
+          "bytes": 77941,
+          "sha256": "b4d795b368344f1405da26c927bcf57678e0d996856d277105c533215c06caba"
+        }
+      ]
+    },
+    {
+      "cell_number": 19,
+      "cell_id": "field-analysis-19",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "outputs"
+      ],
+      "categories": [
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "19f729814ec17a45d20eb04ce65e472e7d3b92fb58377f499729b31b4f991537",
+      "current_source_sha256": "19f729814ec17a45d20eb04ce65e472e7d3b92fb58377f499729b31b4f991537",
+      "execution_count_before": 11,
+      "execution_count_after": 11,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [
+        {
+          "output_index": 1,
+          "mime": "image/png",
+          "bytes": 62325,
+          "sha256": "7208d4e13dee9d6fad068834a425f65e30c3ed4b11c2d00759cab7c34401d709"
+        }
+      ],
+      "current_embedded_images": [
+        {
+          "output_index": 1,
+          "mime": "image/png",
+          "bytes": 62325,
+          "sha256": "7208d4e13dee9d6fad068834a425f65e30c3ed4b11c2d00759cab7c34401d709"
+        }
+      ]
+    },
+    {
+      "cell_number": 20,
+      "cell_id": "field-analysis-20",
+      "type": "markdown",
+      "added": false,
+      "changed_fields": [],
+      "categories": [
+        "unchanged"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "22ff8aefb0e08d1b11cdb2caeed87648f653def8a1b4cde4bef3eaf728ffd817",
+      "current_source_sha256": "22ff8aefb0e08d1b11cdb2caeed87648f653def8a1b4cde4bef3eaf728ffd817",
+      "execution_count_before": null,
+      "execution_count_after": null,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 21,
+      "cell_id": "field-analysis-21",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "outputs"
+      ],
+      "categories": [
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "503746f21fed307f9ad6337d21705ec6f300fe483c8aae8da1ffd7150f91ce8a",
+      "current_source_sha256": "503746f21fed307f9ad6337d21705ec6f300fe483c8aae8da1ffd7150f91ce8a",
+      "execution_count_before": 12,
+      "execution_count_after": 12,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 22,
+      "cell_id": "field-analysis-22",
+      "type": "markdown",
+      "added": false,
+      "changed_fields": [],
+      "categories": [
+        "unchanged"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "5da28f2a9dc81347b4aa6cca724f47c03bfe821fc35e623bd31ef6dbae0b8603",
+      "current_source_sha256": "5da28f2a9dc81347b4aa6cca724f47c03bfe821fc35e623bd31ef6dbae0b8603",
+      "execution_count_before": null,
+      "execution_count_after": null,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 23,
+      "cell_id": "field-analysis-23",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "outputs"
+      ],
+      "categories": [
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "bd24a4e9eda0c7cf0e42c70b5764aac4ee101a4d622d27efb1dfc248cc45d44d",
+      "current_source_sha256": "bd24a4e9eda0c7cf0e42c70b5764aac4ee101a4d622d27efb1dfc248cc45d44d",
+      "execution_count_before": 13,
+      "execution_count_after": 13,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 24,
+      "cell_id": "bd02fc5c",
+      "type": "code",
+      "added": false,
+      "changed_fields": [],
+      "categories": [
+        "unchanged"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "current_source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "execution_count_before": 14,
+      "execution_count_after": 14,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 25,
+      "cell_id": "17afb957",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "execution_count",
+        "outputs",
+        "source"
+      ],
+      "categories": [
+        "intentional post-reconciliation manuscript/figure edit",
+        "station-ID migration change: explicit final-identity guards/order, preserving already migrated physical rules",
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": true,
+      "previous_source_sha256": "0d883cb83207a9174c6877af602180c501d5f4df0a2c9d9c67380044c1e019b9",
+      "current_source_sha256": "11b75c06eefcb49f4c178eed2e4dc757733d6506df28d30155dea6e042417a1e",
+      "execution_count_before": 14,
+      "execution_count_after": 4,
+      "output_content_changed_after_string_normalization": true,
+      "embedded_images_changed": true,
+      "previous_embedded_images": [
+        {
+          "output_index": 0,
+          "mime": "image/png",
+          "bytes": 201617,
+          "sha256": "ab38900ed1c84148f1161f0cd5c4527615a484e40c0f95d57a4a60bbd554f7d0"
+        }
+      ],
+      "current_embedded_images": [
+        {
+          "output_index": 1,
+          "mime": "image/png",
+          "bytes": 95200,
+          "sha256": "6feaa527d0670a09f95e2532571ba64a451212c511755f4f570a59aa4cfd7803"
+        }
+      ]
+    },
+    {
+      "cell_number": 26,
+      "cell_id": "rf25-cv-inputs-20260914",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "outputs"
+      ],
+      "categories": [
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "0a7e08ca1d396aae1f24792659f326ddb1d184030c488a6f7386ec74a7204076",
+      "current_source_sha256": "0a7e08ca1d396aae1f24792659f326ddb1d184030c488a6f7386ec74a7204076",
+      "execution_count_before": 15,
+      "execution_count_after": 15,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [],
+      "current_embedded_images": []
+    },
+    {
+      "cell_number": 27,
+      "cell_id": "589bd454",
+      "type": "code",
+      "added": false,
+      "changed_fields": [
+        "outputs"
+      ],
+      "categories": [
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": null,
+      "source_changed": false,
+      "previous_source_sha256": "fc97506f263892e0aeef51415b69b02757ebdd3ff4cf986d6feff17e54673847",
+      "current_source_sha256": "fc97506f263892e0aeef51415b69b02757ebdd3ff4cf986d6feff17e54673847",
+      "execution_count_before": 16,
+      "execution_count_after": 16,
+      "output_content_changed_after_string_normalization": false,
+      "embedded_images_changed": false,
+      "previous_embedded_images": [
+        {
+          "output_index": 0,
+          "mime": "image/png",
+          "bytes": 1992665,
+          "sha256": "57d258cc0fdfb3ff7682d94c467eac1b99358e5ac195d86aee816a64f7cfd3a7"
+        }
+      ],
+      "current_embedded_images": [
+        {
+          "output_index": 0,
+          "mime": "image/png",
+          "bytes": 1992665,
+          "sha256": "57d258cc0fdfb3ff7682d94c467eac1b99358e5ac195d86aee816a64f7cfd3a7"
+        }
+      ]
+    },
+    {
+      "cell_number": 28,
+      "cell_id": "b6151f49",
+      "type": "code",
+      "added": true,
+      "changed_fields": [
+        "cell_type",
+        "execution_count",
+        "id",
+        "metadata",
+        "outputs",
+        "source"
+      ],
+      "categories": [
+        "intentional post-reconciliation manuscript/figure edit",
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": "Spatial manuscript comparison of existing MODIS/RF25 rasters for 2020-03-13, 2024-07-11 and 2022-03-30; geographic display and shared color scale.",
+      "source_changed": true,
+      "previous_source_sha256": null,
+      "current_source_sha256": "d67767481f8f770892996067b1576ba3b054c7de2a7704153cd68b01e716ed3b",
+      "execution_count_before": null,
+      "execution_count_after": 30,
+      "output_content_changed_after_string_normalization": true,
+      "embedded_images_changed": true,
+      "previous_embedded_images": [],
+      "current_embedded_images": [
+        {
+          "output_index": 1,
+          "mime": "image/png",
+          "bytes": 6367789,
+          "sha256": "4d0953b6db1f8bc92203522bbdb68d83ad0c35fe71e94f4b0124aa11a9106615"
+        }
+      ]
+    },
+    {
+      "cell_number": 29,
+      "cell_id": "cc33380e",
+      "type": "code",
+      "added": true,
+      "changed_fields": [
+        "cell_type",
+        "execution_count",
+        "id",
+        "metadata",
+        "outputs",
+        "source"
+      ],
+      "categories": [
+        "intentional post-reconciliation manuscript/figure edit",
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": "Figure 11: field-proxy versus MODIS/reconciled RF25 scatter and agreement metrics, all 37 pairs and fixed-Kc subset of 19.",
+      "source_changed": true,
+      "previous_source_sha256": null,
+      "current_source_sha256": "dc98ca24a14bfc398ff044779478e23bfb8099e95424dd2d2ea10c5346da44d1",
+      "execution_count_before": null,
+      "execution_count_after": 24,
+      "output_content_changed_after_string_normalization": true,
+      "embedded_images_changed": true,
+      "previous_embedded_images": [],
+      "current_embedded_images": [
+        {
+          "output_index": 7,
+          "mime": "image/png",
+          "bytes": 102986,
+          "sha256": "0700e7314a73889e6be4172cbd4f09deb81b9c618b00a8842506d54fd8b51b37"
+        }
+      ]
+    },
+    {
+      "cell_number": 30,
+      "cell_id": "541ccbea",
+      "type": "code",
+      "added": true,
+      "changed_fields": [
+        "cell_type",
+        "execution_count",
+        "id",
+        "metadata",
+        "outputs",
+        "source"
+      ],
+      "categories": [
+        "intentional post-reconciliation manuscript/figure edit",
+        "regenerated notebook output (including execution state/serialization)"
+      ],
+      "purpose": "Five-panel station temporal comparison of field proxy, MODIS and reconciled RF25, with final station names.",
+      "source_changed": true,
+      "previous_source_sha256": null,
+      "current_source_sha256": "ae08ceb182d3d1050d14eb5e28ec6670810f8e58735ade506839d4024c4c272f",
+      "execution_count_before": null,
+      "execution_count_after": 40,
+      "output_content_changed_after_string_normalization": true,
+      "embedded_images_changed": true,
+      "previous_embedded_images": [],
+      "current_embedded_images": [
+        {
+          "output_index": 1,
+          "mime": "image/png",
+          "bytes": 122540,
+          "sha256": "07adf31c49a3c25aedb4cd70eb2a7d7447d7c5e683f11066be25e506905a347a"
+        }
+      ]
+    }
+  ]
+}

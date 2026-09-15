@@ -12,6 +12,11 @@ available as Git branches:
 
 Repository remote: `origin` is configured for GitHub synchronization.
 
+Current field station identities are ST01 Mangrove, ST02 Pasture, ST03 Oil palm
+plantation, ST04 Banana plantation and ST05 Dry forest. See the
+[identity crosswalk and preservation rules](docs/STATION_IDENTITY_MIGRATION.md).
+Historical field audit documents retain their original station IDs.
+
 ## Final scientific configuration
 
 - Target: `Kc_target = MODIS_ET / ETo`.
