@@ -1,4 +1,4 @@
-﻿"""Audit ST04 local reconciliation convergence using one 9x9 download."""
+﻿"""Audit ST01 local reconciliation convergence using one 9x9 download."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from et_downscaling.overlap_reconciliation import (
 
 
 DATE = "2022-03-30"
-STATION_ID = "ST04"
+STATION_ID = "ST01"
 REFERENCE_RADIUS = 4  # 9x9
 RADII = [2, 3, 4]     # 5x5, 7x7, 9x9
 
@@ -278,7 +278,7 @@ def main():
 
     if station["inside_basin"]:
         raise RuntimeError(
-            "ST04 was expected to be outside "
+            "ST01 was expected to be outside "
             "the official basin domain."
         )
 
@@ -340,7 +340,7 @@ def main():
     )
 
     print(
-        "ST04 native parent:",
+        "ST01 native parent:",
         f"r{parent_row}_c{parent_col}",
     )
 
@@ -357,7 +357,7 @@ def main():
     )
 
     fine_tile = base.fine_tile_for_halo(
-        "ST04_halo9_convergence",
+        "ST01_halo9_convergence",
         transform9,
     )
 
@@ -366,7 +366,7 @@ def main():
         / "outputs"
         / "evaluation"
         / "field_validation"
-        / "st04_validation_extension"
+        / "st01_validation_extension"
         / "halo_convergence"
         / DATE
     )
@@ -435,7 +435,7 @@ def main():
             "=" * 70
         )
         print(
-            f"ST04 {DATE}: solving "
+            f"ST01 {DATE}: solving "
             f"{size}x{size}"
         )
         print(
@@ -503,11 +503,11 @@ def main():
 
     summary_path = (
         output_root
-        / "st04_halo_summary.csv"
+        / "st01_halo_summary.csv"
     )
     comparison_path = (
         output_root
-        / "st04_halo_comparison.csv"
+        / "st01_halo_comparison.csv"
     )
 
     summary_df.to_csv(

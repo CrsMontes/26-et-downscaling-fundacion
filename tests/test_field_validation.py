@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from et_downscaling.field_station_identity import attach_station_identity
+
 from et_downscaling.field_validation import (
     aggregate_field_periods, apply_scenarios, build_attrition, build_metrics,
     load_field_inputs, modis_periods, ndvi_kc, prepare_field_daily, sample_rf25_rasters,
@@ -16,7 +18,7 @@ from et_downscaling.field_validation import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def inputs(station_id="ST02", n=8):
+def inputs(station_id="ST03", n=8):
     _, stations = load_field_inputs(ROOT)
     stations = stations.loc[stations.station_id.eq(station_id)].copy()
     dates = pd.date_range("2022-03-30", periods=n)
@@ -24,7 +26,7 @@ def inputs(station_id="ST02", n=8):
                           "etgage_daily_raw": 0.6, "within_installation_window": True})
     reference = pd.DataFrame({"station_id": station_id, "local_date": dates,
                               "ETo_mm_day": 4.0, "ETr_mm_day": 6.0})
-    return field, stations, reference
+    return attach_station_identity(field), stations, attach_station_identity(reference)
 
 
 def test_cm_to_mm_and_daily_etr_to_eto_before_aggregation():
@@ -41,7 +43,7 @@ def test_cm_to_mm_and_daily_etr_to_eto_before_aggregation():
 
 
 def test_eto_station_is_not_converted_and_bad_reference_is_rejected():
-    field, stations, reference = inputs("ST01")
+    field, stations, reference = inputs("ST02")
     daily = prepare_field_daily(field, stations, reference)
     np.testing.assert_allclose(daily.etgage_eto_equivalent_mm_day, 6.0)
     reference.loc[0, "ETo_mm_day"] = 0
@@ -82,7 +84,7 @@ def test_ndvi_kc_is_rejected_not_clipped():
 
 def scenario_base():
     return pd.DataFrame({
-        "station_id": ["ST01", "ST02", "ST03", "ST04", "ST05"],
+        "station_id": ["ST02", "ST03", "ST04", "ST01", "ST05"],
         "period_start": pd.Timestamp("2022-03-30"), "field_period_valid": True,
         "field_reference_eto_mm_period": 40.0,
         "NDVI_local_20m": [0.5, np.nan, 0.6, 0.7, 0.8],
@@ -96,9 +98,9 @@ def test_fixed_kc_application_and_scenario_labels():
     pairs = apply_scenarios(scenario_base())
     historic = pairs.loc[pairs.scenario.eq("historical")].set_index("station_id")
     sensitivity = pairs.loc[pairs.scenario.eq("fao_sensitivity")].set_index("station_id")
-    np.testing.assert_allclose(historic.loc[["ST01", "ST02", "ST03"], "ET_field_proxy_mm_period"], [34, 38, 44])
-    np.testing.assert_allclose(sensitivity.loc[["ST01", "ST02", "ST03"], "ET_field_proxy_mm_period"], [30, 40, 44])
-    assert historic.loc["ST04", "ET_field_proxy_mm_period"] == pytest.approx(40 * (1.457 * 0.7 - 0.1725))
+    np.testing.assert_allclose(historic.loc[["ST02", "ST03", "ST04"], "ET_field_proxy_mm_period"], [34, 38, 44])
+    np.testing.assert_allclose(sensitivity.loc[["ST02", "ST03", "ST04"], "ET_field_proxy_mm_period"], [30, 40, 44])
+    assert historic.loc["ST01", "ET_field_proxy_mm_period"] == pytest.approx(40 * (1.457 * 0.7 - 0.1725))
 
 
 def test_fair_comparisons_use_identical_keys_across_scenarios_and_products():
@@ -113,8 +115,8 @@ def test_fair_comparisons_use_identical_keys_across_scenarios_and_products():
     assert both.R2.isna().all() and both.KGE.isna().all()
     assert len(stations) == 5 * 3 * 2 * 3
     attrition = build_attrition(pairs).set_index(["scenario", "station_id"])
-    assert attrition.loc[("ndvi20_all", "ST02"), "n_missing_ndvi"] == 1
-    assert attrition.loc[("historical", "ST03"), "n_proxy_RF25_aoa_excluded"] == 1
+    assert attrition.loc[("ndvi20_all", "ST03"), "n_missing_ndvi"] == 1
+    assert attrition.loc[("historical", "ST04"), "n_proxy_RF25_aoa_excluded"] == 1
 
 
 def test_duplicate_days_and_wrong_station_cache_fail():
@@ -122,7 +124,7 @@ def test_duplicate_days_and_wrong_station_cache_fail():
     with pytest.raises(ValueError, match="duplicate"):
         prepare_field_daily(pd.concat([field, field.iloc[:1]]), stations, reference)
     reference["station_id"] = "VF01"
-    with pytest.raises(ValueError, match="Virtual10"):
+    with pytest.raises(ValueError, match="Unknown physical field station VF01"):
         prepare_field_daily(field, stations, reference)
 
 
@@ -140,7 +142,7 @@ def test_canonical_training_rejects_field_station_master(tmp_path, monkeypatch):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     master = tmp_path / "master.csv"
-    pd.DataFrame({"station_id": ["ST01"], "period_start": ["2022-03-30"], "modis_pixel_id": [123]}).to_csv(master, index=False)
+    pd.DataFrame({"station_id": ["ST02"], "period_start": ["2022-03-30"], "modis_pixel_id": [123]}).to_csv(master, index=False)
     monkeypatch.setattr(module, "source_master_path", lambda: master)
     monkeypatch.setattr(module, "load_frozen_selection", lambda: (pd.DataFrame({"virtual_id": ["VF01"]}), pd.DataFrame()))
     with pytest.raises(RuntimeError, match="not the Virtual10 extraction"):
@@ -205,7 +207,7 @@ def test_sample_only_completed_published_rf25_and_record_aoa(
 
     periods = pd.DataFrame(
         {
-            "station_id": ["ST01", "ST02"],
+            "station_id": ["ST02", "ST03"],
             "longitude": longitude,
             "latitude": latitude,
             "inside_basin": True,
@@ -268,5 +270,4 @@ def test_sample_only_completed_published_rf25_and_record_aoa(
 
     # Raster, metadata and execution-evidence hashes are recorded.
     assert len(provenance) == 3
-
 

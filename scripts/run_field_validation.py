@@ -25,6 +25,7 @@ from et_downscaling.field_validation import (
 from et_downscaling.field_rf25_local import audit_existing_raster
 from et_downscaling.field_rf25_products import production_contract, inventory_products, produce_field_date
 from et_downscaling.reference_et_local import build_daily_reference_et
+from et_downscaling.field_station_identity import attach_station_identity, validate_station_table
 from et_downscaling.workspace import get_workspace_paths
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--project", help="Earth Engine project; required only for missing field caches.")
     parser.add_argument("--scenario", choices=["all", *VALIDATION_SCENARIOS], default="all",
                         help="Console selection; outputs always retain all four scientific sets.")
-    parser.add_argument("--daily-reference", type=Path, help="Existing ST01-ST05 daily modeled ETo/ETr CSV.")
+    parser.add_argument("--daily-reference", type=Path, help="Existing ST01–ST05 daily modeled ETo/ETr CSV.")
     parser.add_argument("--era5-hourly", type=Path, help="Existing field hourly ERA5 CSV; requires --station-support.")
     parser.add_argument("--station-support", type=Path, help="Field support CSV for local reference-ET reconstruction.")
     parser.add_argument("--satellite-table", type=Path,
@@ -79,7 +80,7 @@ def main() -> None:
     # A different station geometry/date range or optical implementation cannot
     # silently reuse an earlier cache. Existing cache partitions remain untouched.
     acquisition_names = ["reference_et_local", "meteorology_export", "modis", "production",
-                         "rf25_production", "sentinel2", "optical", "config", "field_validation"]
+                         "rf25_production", "sentinel2", "optical", "config", "field_validation", "field_station_identity"]
     contract = {key: value for key, value in hashes.items()
                 if key.startswith("data/") or Path(key).stem in acquisition_names}
     import hashlib
@@ -96,13 +97,15 @@ def main() -> None:
 
     def read_input(path: Path) -> pd.DataFrame:
         source_inputs[str(path.resolve())] = sha256(path)
-        return pd.read_csv(path, dtype={"station_id": str})
+        table = pd.read_csv(path, dtype={"station_id": str})
+        validate_station_table(table, require_uid=True)
+        return table
 
     if args.daily_reference:
         reference = read_input(args.daily_reference)
         reference_origin = str(args.daily_reference.resolve())
     elif args.era5_hourly:
-        reference = build_daily_reference_et(read_input(args.era5_hourly), read_input(args.station_support))
+        reference = attach_station_identity(build_daily_reference_et(read_input(args.era5_hourly), read_input(args.station_support)))
         reference_origin = "current build_daily_reference_et from supplied raw field ERA5/support"
     elif reference_path.is_file():
         reference = read_input(reference_path)
@@ -110,16 +113,17 @@ def main() -> None:
         reference = None
         current = get_workspace_paths(ROOT).master / "S2"
         for path in sorted(current.glob("reference_et_daily_*.csv")):
-            candidate = read_input(path)
+            candidate = pd.read_csv(path, dtype={"station_id": str})
             if set(stations.station_id).issubset(set(candidate.station_id)):
                 try:
+                    validate_station_table(candidate, require_uid=True)
                     prepare_field_daily(field, stations, candidate)
                 except ValueError as error:
                     print(f"Reference cache unsuitable: {path}: {error}", flush=True)
                     continue
                 reference, reference_origin = candidate, str(path.resolve())
                 break
-            print(f"Reference cache has no full ST01-ST05 coverage; skipping {path}", flush=True)
+            print(f"Reference cache has no full ST01–ST05 coverage; skipping {path}", flush=True)
         if reference is None:
             initialize_ee(args.project)
             ee_ready = True
@@ -217,8 +221,8 @@ def main() -> None:
         "metric_units": "mm per MODIS period; R2 and KGE dimensionless; BIAS = prediction - field proxy, or RF25 - MODIS for MODIS_vs_RF25",
         "metric_subsets": {"available_sample": "Each scenario and comparison uses all valid available pairs; no NDVI intersection is imposed on the principal result.",
                            "common_sample": "Identical keys across scenarios for each product within each declared family; MODIS sensitivity does not require an RF25 raster.",
-                           "main_vs_sensitivities": "Four sets; intersection necessarily restricted to ST01-ST03.",
-                           "all_station_sensitivities": "Three sensitivity sets; ST01-ST05 may contribute."},
+                           "main_vs_sensitivities": "Four sets; intersection necessarily restricted to ST02, ST03, ST04.",
+                           "all_station_sensitivities": "Three sensitivity sets; ST01–ST05 may contribute."},
         "attrition": attrition.to_dict("records"), "rf25_training_used_field": False,
         "rf25_training_called": False, "RF25_source": "verified_final_published_raster_pixel",
         "basin_raster_production_called": bool(produced), "produced_dates": produced, "all_scenarios_saved": list(VALIDATION_SCENARIOS),
@@ -227,7 +231,7 @@ def main() -> None:
             "Fixed Kc citations and NDVI relation applicability are not established by repository history; fao_sensitivity is a requested assumption set.",
             "NDVI scenarios share Sentinel-2 information with RF25; no explicit water-stress correction is applied.",
             "Five valid days may be expanded to eight; complete_8of8 periods are identifiable from n_valid_field_days and number_days.",
-            "ST02-ST05 are flagged nonconforming installations; ST04 is outside the published basin domain.",
+            "ST03, ST04, ST01, ST05 are flagged nonconforming installations; ST01 is outside the published basin domain.",
             "Local station reconciliation was rejected as a replacement for globally accepted canonical publication.",
             "Absent or unattributed final products remain pending; unknown diagnostics are not scientific exclusions.",
             "Historical scenario preserves conversion rules and later local NDVI support; it does not claim to reproduce frozen legacy metrics with different spatial supports/products.",

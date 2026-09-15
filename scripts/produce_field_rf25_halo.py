@@ -69,7 +69,7 @@ FIELD_DATES = [
     "2022-06-26",
 ]
 
-DEFAULT_STATIONS = ["ST01", "ST02", "ST03", "ST05"]
+DEFAULT_STATIONS = ["ST02", "ST03", "ST04", "ST05"]
 
 HALO_RADIUS = 3
 HALO_SIZE = 2 * HALO_RADIUS + 1
@@ -119,8 +119,10 @@ def snap_ceil(value: float, step: float) -> float:
 
 
 def load_stations(root: Path) -> dict[str, dict[str, object]]:
+    from et_downscaling.field_station_identity import validate_station_geometry
     path = root / "data" / "stations" / "fundacion_stations.geojson"
     payload = json.loads(path.read_text(encoding="utf-8"))
+    validate_station_geometry(payload)
 
     result = {}
 
@@ -130,6 +132,7 @@ def load_stations(root: Path) -> dict[str, dict[str, object]]:
         longitude, latitude = feature["geometry"]["coordinates"]
 
         result[station_id] = {
+            **properties,
             "station_id": station_id,
             "station": properties.get("station", station_id),
             "inside_basin": bool(properties.get("inside_basin", False)),
@@ -730,7 +733,7 @@ def write_central_product(
         "raw_tile": str(raw_path),
         "method_note": (
             "Operational 7x7 station-validation halo. "
-            "For ST01, ST02, ST03 and ST05 the halo "
+            "For ST02, ST03, ST04 and ST05 the halo "
             "was empirically checked against full-basin "
             "products before operational use."
         ),

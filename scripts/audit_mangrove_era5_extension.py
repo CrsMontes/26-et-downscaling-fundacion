@@ -1,4 +1,4 @@
-﻿"""Audit ST04 RF25 state after nearest-valid ERA5-Land coastal support."""
+﻿"""Audit ST01 RF25 state after nearest-valid ERA5-Land coastal support."""
 
 from pathlib import Path
 import sys
@@ -112,7 +112,7 @@ missing = [
 
 print()
 print("=" * 78)
-print("ST04 NEAREST-VALID ERA5-LAND EXTENSION")
+print("ST01 NEAREST-VALID ERA5-LAND EXTENSION")
 print("=" * 78)
 print("ERA5 support longitude:", support_coordinates[0])
 print("ERA5 support latitude :", support_coordinates[1])

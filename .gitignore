@@ -38,3 +38,7 @@ data/field/archive/
 
 # Local analysis notebooks
 notebooks/
+
+# Local station-identity recovery bundles (never active inputs or commits)
+.station-migration-stage/
+.station-migration-legacy/

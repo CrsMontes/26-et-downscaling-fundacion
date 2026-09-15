@@ -21,7 +21,7 @@ SUPPORT_FRACTION = 0.90
 TOLERANCE_MM = 0.01
 NODATA = -9999.0
 
-STATIONS = ["ST01", "ST02", "ST03", "ST05"]
+STATIONS = ["ST02", "ST03", "ST04", "ST05"]
 
 
 def scatter_fine(values, active_fine, shape, fill_value=np.nan, dtype=float):

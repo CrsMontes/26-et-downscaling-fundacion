@@ -75,15 +75,15 @@ The command reads the versioned ST01–ST05 observations and metadata, ignoring
 Virtual10 station overrides. Raw daily ETgage readings are in cm (confirmed by
 the project owner) and are multiplied by 10. Historical QC retains positive,
 nonmissing readings within the recorded installation window and 0.05–12 mm/day.
-ST02–ST05 measure ETr: each daily reading is divided by the modeled station-day
-ETr/ETo ratio before Kc is applied. ST01 already measures ETo. Period reference
+ST01, ST03, ST04 and ST05 measure ETr: each daily reading is divided by the modeled station-day
+ETr/ETo ratio before Kc is applied. ST02 already measures ETo. Period reference
 ET is the mean of valid ETo-equivalent days multiplied by the actual MODIS
 period length, requiring at least five valid days; incomplete periods are thus
 expanded, not simply summed. Daily reference ET uses the current local
 ASCE-EWRI implementation and field-specific ERA5-Land supports. A Virtual10-only
 reference cache cannot substitute for real-station meteorology.
 
-| Scenario | ST01 | ST02 | ST03 | ST04/ST05 |
+| Scenario | ST02 | ST03 | ST04 | ST01/ST05 |
 |---|---|---|---|---|
 | `fixed_kc_main` | 0.85 | 0.95 | 1.10 | Excluded (principal conservative set) |
 | `historical_all_stations` | 0.85 | 0.95 | 1.10 | Local 20 m NDVI proxy |
@@ -105,9 +105,9 @@ verified FAO table citations. History labels the original fixed values
 “FAO-56 fixed” but does not establish their exact table/page or crop-stage
 provenance. The NDVI relation's calibration and reference basis likewise remain
 undocumented. No explicit water-stress correction is made. `ndvi20_all` is not
-independent of Sentinel-2-based RF25, and ST04/ST05 NDVI proxies are sensitivity
+independent of Sentinel-2-based RF25, and ST01/ST05 NDVI proxies are sensitivity
 results in every scenario. Metadata also retain nonconforming installation
-flags and ST04's position outside the basin.
+flags and ST01's position outside the basin.
 
 Results and resumable field acquisition caches are isolated under
 `outputs/evaluation/field_validation/`. Outputs include daily QC, period pairs,
@@ -121,8 +121,8 @@ their required sample size/variance is absent.
 `available_sample` retains every valid pair of each scenario/product and is the
 principal result. `common_sample` uses identical station-period keys across
 scenarios for each product. The `main_vs_sensitivities` family intersects all
-four scenarios on ST01-ST03; `all_station_sensitivities` intersects the three
-ST01-ST05 sensitivities. MODIS common samples do not require RF25 availability.
+four scenarios on ST02, ST03, ST04; `all_station_sensitivities` intersects the three
+ST01–ST05 sensitivities. MODIS common samples do not require RF25 availability.
 Pair-key SHA-256 values document the intersections. RF25 pairs also require
 native parent MODIS availability in the field comparison.
 

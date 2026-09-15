@@ -15,13 +15,11 @@ import numpy as np
 import pandas as pd
 
 from .metrics import calculate_metrics
+from .field_station_identity import (
+    FIXED_KC, attach_station_identity, validate_station_geometry, validate_station_table,
+)
 
 SCENARIOS = ("historical", "fao_sensitivity", "ndvi20_all")
-FIXED_KC = {
-    "historical": {"ST01": 0.85, "ST02": 0.95, "ST03": 1.10},
-    "fao_sensitivity": {"ST01": 0.75, "ST02": 1.00, "ST03": 1.10},
-    "ndvi20_all": {},
-}
 KEYS = ["station_id", "period_start"]
 PRODUCTS = {"MODIS": "ET_MODIS_mm_period", "RF25": "ET_RF25_mm_period"}
 RAW_TO_MM = 10.0
@@ -51,6 +49,8 @@ def load_field_inputs(root: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Read versioned real stations, deliberately ignoring Virtual10 overrides."""
     field = pd.read_csv(root / "data/field/field_etgage.csv", dtype={"station_id": str})
     geojson = json.loads((root / "data/stations/fundacion_stations.geojson").read_text(encoding="utf-8"))
+    validate_station_geometry(geojson)
+    validate_station_table(field, require_uid=True)
     rows = []
     for feature in geojson["features"]:
         if feature["geometry"]["type"] != "Point":
@@ -61,11 +61,14 @@ def load_field_inputs(root: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     unique(stations, ["station_id"], "stations")
     if set(field.station_id) != set(stations.station_id):
         raise ValueError("Field observations and versioned station IDs differ.")
-    return field, stations
+    return field, stations.sort_values("station_id").reset_index(drop=True)
 
 
 def prepare_field_daily(field: pd.DataFrame, stations: pd.DataFrame, reference: pd.DataFrame) -> pd.DataFrame:
     """Historical QC and daily reference harmonization, with explicit bad-input errors."""
+    if "station_nomenclature_version" in stations:
+        validate_station_table(field, require_uid=True)
+        validate_station_table(reference, require_uid=True)
     daily = field.copy()
     daily["date"] = pd.to_datetime(daily["date"], errors="raise")
     unique(daily, ["station_id", "date"], "field")
@@ -456,8 +459,9 @@ def acquire_reference(field: pd.DataFrame, stations: pd.DataFrame, cache: Path) 
     else:
         footprints = field_footprints(stations)
         era5_support = build_era5_station_supports(footprints)
-        support = ee_table(build_station_support_table(footprints, era5_support))
+        support = attach_station_identity(ee_table(build_station_support_table(footprints, era5_support)))
         support.to_csv(support_path, index=False)
+    validate_station_table(support, require_uid=True)
     dates = pd.to_datetime(field.date)
     first, end = dates.min(), dates.max() + pd.Timedelta(days=1)
     chunks = []
@@ -471,16 +475,17 @@ def acquire_reference(field: pd.DataFrame, stations: pd.DataFrame, cache: Path) 
             else:
                 start_utc = (start_local + pd.Timedelta(hours=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
                 end_utc = (end_local + pd.Timedelta(hours=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
-                chunk = ee_table(build_era5_hourly_table(ee.Feature(None, station), start_utc, end_utc))
+                chunk = attach_station_identity(ee_table(build_era5_hourly_table(ee.Feature(None, station), start_utc, end_utc)))
                 unique(chunk, ["station_id", "timestamp_utc"], "ERA5 partition")
                 expected = int((end_local - start_local).total_seconds() / 3600)
                 if len(chunk) != expected:
                     raise ValueError(f"Incomplete hourly ERA5 partition: {path}, {len(chunk)} != {expected}")
                 chunk.to_csv(path, index=False)
+            validate_station_table(chunk, require_uid=True)
             chunks.append(chunk)
     hourly = pd.concat(chunks, ignore_index=True)
     unique(hourly, ["station_id", "timestamp_utc"], "field ERA5")
-    return build_daily_reference_et(hourly, support)
+    return attach_station_identity(build_daily_reference_et(hourly, support))
 
 
 def acquire_satellite(periods: pd.DataFrame, stations: pd.DataFrame, cache: Path) -> pd.DataFrame:
@@ -525,7 +530,9 @@ def acquire_satellite(periods: pd.DataFrame, stations: pd.DataFrame, cache: Path
             for column in ("NDVI_local_20m", "ET_MODIS_mm_period"):
                 if column not in table:
                     table[column] = np.nan
+            table = attach_station_identity(table)
             table.to_csv(path, index=False)
+        validate_station_table(table, require_uid=True)
         if set(table.station_id) != set(stations.station_id):
             raise ValueError(f"Satellite cache is not the five field stations: {path}")
         if not pd.to_numeric(table.number_days).eq(period.number_days).all():

@@ -13,7 +13,7 @@ MIGRATION = runpy.run_path(str(ROOT / "scripts/migrate_field_rf25_signatures.py"
 
 
 def test_extension_format_matches_existing_production_code():
-    source = ast.parse((ROOT / "scripts/produce_st04_rf25_halo.py").read_bytes())
+    source = ast.parse((ROOT / "scripts/produce_mangrove_rf25_halo.py").read_bytes())
     function = next(node for node in ast.walk(source)
                     if isinstance(node, ast.FunctionDef) and node.name == "build_extension_signature")
     namespace = dict(hashlib=hashlib, METHOD=MIGRATION["METHOD"],
@@ -49,7 +49,11 @@ def test_unknown_or_already_migrated_metadata_is_rejected(document):
 
 
 def test_completed_migration_preserves_every_tiff_and_other_metadata():
-    path = MIGRATION["PRODUCTS"] / MIGRATION["MANIFEST_NAME"]
+    # The deterministic-signature audit remains evidence in its original namespace.
+    receipt = ROOT / "outputs/evaluation/field_validation/station_identity_migration_manifest.json"
+    legacy_root = Path(json.loads(receipt.read_text())["legacy_root"]) if receipt.exists() else ROOT
+    products = legacy_root / MIGRATION["PRODUCTS"].relative_to(ROOT)
+    path = products / MIGRATION["MANIFEST_NAME"]
     if not path.exists():
         pytest.skip("Local completed migration manifest unavailable")
     manifest = json.loads(path.read_text())
@@ -59,14 +63,14 @@ def test_completed_migration_preserves_every_tiff_and_other_metadata():
     assert before == after
     assert len(before) == 210
     assert sum(Path(name).name.startswith("RF25_halo7_") for name in before) == 70
-    assert {p.relative_to(ROOT).as_posix() for p in MIGRATION["PRODUCTS"].rglob("*.tif")} == set(before)
+    assert {p.relative_to(legacy_root).as_posix() for p in products.rglob("*.tif")} == set(before)
     for name, digest in before.items():
-        assert MIGRATION["sha256"](ROOT / name) == digest
+        assert MIGRATION["sha256"](legacy_root / name) == digest
     assert len(manifest["metadata_files"]) == 142
-    assert {p.relative_to(ROOT).as_posix() for p in MIGRATION["PRODUCTS"].rglob("*.json")
+    assert {p.relative_to(legacy_root).as_posix() for p in products.rglob("*.json")
             if p != path} == {entry["metadata_file"] for entry in manifest["metadata_files"]}
     for entry in manifest["metadata_files"]:
-        metadata_path = ROOT / entry["metadata_file"]
+        metadata_path = legacy_root / entry["metadata_file"]
         assert MIGRATION["sha256"](metadata_path) == entry["metadata_sha256_after"]
         current = json.loads(metadata_path.read_text())
         assert current.pop("legacy_scientific_signature") == entry["old_signature"]
