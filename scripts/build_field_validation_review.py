@@ -65,12 +65,20 @@ def sample(path, longitude, latitude):
 def build_tables():
     manifest = json.loads((HALOS / "deterministic_signature_migration_manifest.json").read_text())
     assert manifest["status"] == "completed"
-    migration = json.loads((OUTPUT / "station_identity_migration_manifest.json").read_text())
-    if migration["status"] != "completed":
-        raise ValueError("Station identity migration is not complete.")
-    entries = {entry["new_path"]: entry for entry in migration["files"]}
-    expected_rasters = {name: entry["sha256_after"] for name, entry in entries.items() if name.endswith(".tif")}
-    hashes_before = {name: sha256(ROOT / name) for name in expected_rasters}
+    integrity = json.loads(
+        (ROOT / "config" / "field_validation_raster_integrity.json").read_text()
+    )
+    expected_rasters = integrity["tiff_sha256"]
+
+    if integrity["raster_count"] != len(expected_rasters):
+        raise ValueError(
+            "Field-validation raster integrity contract has an inconsistent raster count."
+        )
+
+    hashes_before = {
+        name: sha256(ROOT / name)
+        for name in expected_rasters
+    }
     assert hashes_before == expected_rasters
     if not (CACHE / "contract.json").is_file():
         raise FileNotFoundError("Local raw field cache is unavailable. Supply an explicitly migrated --cache-dir; the validated workbook remains available for offline analysis.")

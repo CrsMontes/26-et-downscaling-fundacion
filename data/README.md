@@ -25,9 +25,9 @@ workflow and its separate field comparison.
 | ST04 | Banana plantation |
 | ST05 | Dry forest |
 
-Original source-sheet names are preserved exactly. Current station IDs must be
-joined with the physical identity/version evidence described in
-[the migration crosswalk](../docs/STATION_IDENTITY_MIGRATION.md).
+Original source-sheet names are preserved exactly as source provenance.
+Downstream workflows use the canonical station identities defined in
+`src/et_downscaling/field_station_identity.py`.
 
 Historical field workbooks and intermediate reconstruction files may be kept
 locally under `field/archive/`. This directory is ignored by Git and is not

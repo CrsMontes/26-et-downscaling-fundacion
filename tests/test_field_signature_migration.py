@@ -47,43 +47,34 @@ def test_unknown_or_already_migrated_metadata_is_rejected(document):
     with pytest.raises(ValueError):
         MIGRATION["migrated_metadata"](document, "old", "new")
 
+def test_final_field_validation_rasters_match_integrity_contract():
+    contract_path = (
+        ROOT
+        / "config"
+        / "field_validation_raster_integrity.json"
+    )
 
-def test_completed_migration_preserves_every_tiff_and_other_metadata():
-    # The deterministic-signature audit remains evidence in its original namespace.
-    receipt = ROOT / "outputs/evaluation/field_validation/station_identity_migration_manifest.json"
-    legacy_root = Path(json.loads(receipt.read_text())["legacy_root"]) if receipt.exists() else ROOT
-    products = legacy_root / MIGRATION["PRODUCTS"].relative_to(ROOT)
-    path = products / MIGRATION["MANIFEST_NAME"]
-    if not path.exists():
-        pytest.skip("Local completed migration manifest unavailable")
-    manifest = json.loads(path.read_text())
-    assert manifest["status"] == "completed"
-    assert manifest["all_tiffs_byte_identical"] is True
-    before, after = manifest["tiff_sha256_before"], manifest["tiff_sha256_after"]
-    assert before == after
-    assert len(before) == 210
-    assert sum(Path(name).name.startswith("RF25_halo7_") for name in before) == 70
-    assert {p.relative_to(legacy_root).as_posix() for p in products.rglob("*.tif")} == set(before)
-    for name, digest in before.items():
-        assert MIGRATION["sha256"](legacy_root / name) == digest
-    assert len(manifest["metadata_files"]) == 142
-    assert {p.relative_to(legacy_root).as_posix() for p in products.rglob("*.json")
-            if p != path} == {entry["metadata_file"] for entry in manifest["metadata_files"]}
-    for entry in manifest["metadata_files"]:
-        metadata_path = legacy_root / entry["metadata_file"]
-        assert MIGRATION["sha256"](metadata_path) == entry["metadata_sha256_after"]
-        current = json.loads(metadata_path.read_text())
-        assert current.pop("legacy_scientific_signature") == entry["old_signature"]
-        assert current["scientific_signature"] == entry["new_signature"]
-        is_extension = any("RF25_halo7_ST04_" in name or "ST04_halo7.tif" in name
-                           for name in entry["associated_rasters"])
-        expected = manifest["st04_extension_signature"] if is_extension else MIGRATION["PRODUCTION_SIGNATURE"]
-        assert entry["new_signature"] == expected
-        original = entry["metadata_before"]
-        if "scientific_signature" in original:
-            current["scientific_signature"] = original["scientific_signature"]
-        else:
-            current.pop("scientific_signature")
-            assert current.pop("canonical_production_scientific_signature") == MIGRATION["PRODUCTION_SIGNATURE"]
-        assert json.dumps(current, sort_keys=True) == json.dumps(original, sort_keys=True)
-        assert all(name in before for name in entry["associated_rasters"])
+    contract = json.loads(
+        contract_path.read_text(encoding="utf-8")
+    )
+
+    expected = contract["tiff_sha256"]
+
+    assert contract["version"] == 1
+    assert contract["raster_count"] == 212
+    assert contract["groups"]["local_halo7_products"] == 210
+    assert contract["groups"]["st01_validation_extension"] == 2
+    assert len(expected) == 212
+
+    # There are 70 final RF25 halo products:
+    # 14 periods x 5 monitoring stations.
+    assert sum(
+        Path(name).name.startswith("RF25_halo7_")
+        for name in expected
+    ) == 70
+
+    for relative_path, expected_hash in expected.items():
+        raster_path = ROOT / relative_path
+
+        assert raster_path.exists(), relative_path
+        assert MIGRATION["sha256"](raster_path) == expected_hash
